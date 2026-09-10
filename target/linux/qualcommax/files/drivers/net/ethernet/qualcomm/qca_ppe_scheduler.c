@@ -137,7 +137,7 @@ const struct psch_tdm_entry hppe_psch_tdm[] = {
 	{ TDM_PORT_FAB_0, TDM_PORT_PHY_4 },
 };
 
-/* CPPE buffer manager TDM -- 98 entries */
+/* CPPE buffer manager TDM -- 96 entries */
 const struct bm_tdm_entry cppe_bm_tdm[] = {
 	{ TDM_PORT_CPU, TDM_DIR_INGRESS },
 	{ TDM_PORT_CPU, TDM_DIR_EGRESS },
@@ -235,8 +235,6 @@ const struct bm_tdm_entry cppe_bm_tdm[] = {
 	{ TDM_PORT_FAB_1, TDM_DIR_EGRESS },
 	{ TDM_PORT_PHY_7, TDM_DIR_INGRESS },
 	{ TDM_PORT_PHY_7, TDM_DIR_EGRESS },
-	{ TDM_PORT_CPU, TDM_DIR_INGRESS },
-	{ TDM_PORT_CPU, TDM_DIR_EGRESS },
 };
 
 /* HPPE buffer manager TDM -- 96 entries
@@ -381,7 +379,7 @@ static void ppe_tdm_init(struct qca_ppe_priv *priv)
 			     FIELD_PREP(PPE_PSCH_ENS_PORT, psch[i].en_port) |
 			     FIELD_PREP(PPE_PSCH_DES_PORT, psch[i].de_port));
 
-		prev_de_port = BIT(psch[i].de_port);
+		prev_de_port = psch[i].de_port;
 	}
 
 	regmap_write(priv->regmap, PPE_TM_TDM_DEPTH,
@@ -691,16 +689,24 @@ static void ppe_l0_scheduler_init(struct qca_ppe_priv *priv)
 		u8 counts[] = { p->ucast_count, p->mcast_count };
 		int k;
 
+		/* Multicast queues take the port's top unicast slots, not
+		 * 0..mcast_count-1: sharing a slot puts two queues on one DRR
+		 * node, whose credit rotation can latch and freeze both until
+		 * the node is rebuilt. The top slots idle unless skb->priority
+		 * selects them, at the cost of sitting on the port's second SP,
+		 * which puts flooding above best-effort unicast.
+		 */
 		for (k = 0; k < 2; k++) {
 			for (j = 0; j < counts[k]; j++) {
+				int slot = k ? p->ucast_count - counts[k] + j : j;
 				struct l0_cfg c = {
 					.queue = bases[k] + j,
 					.port = p->port,
-					.sp = p->sp_base + j / PPE_MAX_SP_PRI,
-					.cpri = j % PPE_MAX_SP_PRI,
-					.cdrr = p->cdrr_base + j,
-					.epri = j % PPE_MAX_SP_PRI,
-					.edrr = p->cdrr_base + j,
+					.sp = p->sp_base + slot / PPE_MAX_SP_PRI,
+					.cpri = slot % PPE_MAX_SP_PRI,
+					.cdrr = p->cdrr_base + slot,
+					.epri = slot % PPE_MAX_SP_PRI,
+					.edrr = p->cdrr_base + slot,
 				};
 
 				ppe_l0_entry_write(priv, &c);
@@ -730,23 +736,58 @@ static void ppe_edma_ring_map_init(struct qca_ppe_priv *priv)
 	regmap_write(priv->regmap, PPE_TM_RING_Q_MAP(2) + 4 * 4, 0xffff);
 }
 
+/* The precedence fields live in a register of their own on IPQ8074 and in the
+ * second word of the port's MRU/MTU entry on IPQ6018, in a different order.
+ * One lookup names the register and every field so that no caller has to know
+ * which generation it is on.
+ */
+struct ppe_qos_prec {
+	u32 reg;
+	u32 dscp, pcp, preheader, flow, acl;
+};
+
+static struct ppe_qos_prec ppe_qos_prec(struct qca_ppe_priv *priv, int port)
+{
+	if (priv->data->type == PPE_TYPE_IPQ6018)
+		return (struct ppe_qos_prec){
+			.reg = PPE_MRU_MTU_CTRL(port,
+					priv->data->mru_mtu_ctrl_stride) + 4,
+			.dscp = PPE_MRU_QOS_DSCP_PREC,
+			.pcp = PPE_MRU_QOS_PCP_PREC,
+			.preheader = PPE_MRU_QOS_PREHEADER_PREC,
+			.flow = PPE_MRU_QOS_FLOW_PREC,
+			.acl = PPE_MRU_QOS_ACL_PREC,
+		};
+
+	return (struct ppe_qos_prec){
+		.reg = PPE_PORT_QOS_CTRL(port),
+		.dscp = PPE_QOS_DSCP_PREC,
+		.pcp = PPE_QOS_PCP_PREC,
+		.preheader = PPE_QOS_PREHEADER_PREC,
+		.flow = PPE_QOS_FLOW_PREC,
+		.acl = PPE_QOS_ACL_PREC,
+	};
+}
+
+/* Which classifier's internal priority wins when several offer one: the flow
+ * table first, then the CPU preheader, ACL, DSCP and last a VLAN's PCP.
+ */
 static void ppe_qos_init(struct qca_ppe_priv *priv)
 {
 	int i;
-	u32 qos_bits;
 
-	qos_bits = FIELD_PREP(PPE_QOS_PREHEADER_PREC, 3) |
-		   FIELD_PREP(PPE_QOS_DSCP_PREC, 1) |
-		   FIELD_PREP(PPE_QOS_FLOW_PREC, 4) |
-		   FIELD_PREP(PPE_QOS_ACL_PREC, 2);
+	for (i = 0; i < PPE_NUM_PORTS; i++) {
+		struct ppe_qos_prec p = ppe_qos_prec(priv, i);
 
-	for (i = 0; i < PPE_NUM_PORTS; i++)
-		regmap_update_bits(priv->regmap, PPE_PRX_MRU_MTU_W1(i),
-				   PPE_QOS_PCP_GRP | PPE_QOS_DSCP_GRP |
-				   PPE_QOS_PREHEADER_PREC | PPE_QOS_PCP_PREC |
-				   PPE_QOS_DSCP_PREC | PPE_QOS_FLOW_PREC |
-				   PPE_QOS_ACL_PREC,
-				   qos_bits);
+		regmap_update_bits(priv->regmap, p.reg,
+				   p.dscp | p.pcp | p.preheader | p.flow |
+				   p.acl,
+				   field_prep(p.flow, 4) |
+				   field_prep(p.preheader, 3) |
+				   field_prep(p.acl, 2) |
+				   field_prep(p.dscp, 1) |
+				   field_prep(p.pcp, 0));
+	}
 }
 
 const struct psch_tdm_data cppe_psch_tdm_data = {

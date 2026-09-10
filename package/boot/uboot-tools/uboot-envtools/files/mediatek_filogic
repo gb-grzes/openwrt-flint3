@@ -26,6 +26,7 @@ abt,asr3000|\
 acer,predator-w6x-ubootmod|\
 asus,zenwifi-bt8-ubootmod|\
 cmcc,a10-ubootmod|\
+comfast,cf-wr632ax-ubi|\
 comfast,cf-wr632ax-ubootmod|\
 creatlentem,clt-r30b1-ubi|\
 cudy,m3000-v1-ubootmod|\
@@ -40,10 +41,12 @@ h3c,magic-nx30-pro|\
 imou,hx21|\
 jcg,q30-pro|\
 konka,komi-a31|\
+mercusys,mr85x-ubi|\
 mercusys,mr90x-v1-ubi|\
 netcore,n60|\
 netcore,n60-pro|\
 netis,eap930-v1|\
+netis,n6-v2|\
 netis,nx30v2|\
 netis,nx31|\
 netis,nx32u|\
@@ -54,6 +57,8 @@ qihoo,360t7-ubi|\
 routerich,ax3000-ubootmod|\
 routerich,be7200|\
 snr,snr-cpe-ax2|\
+teralink,tl3020-256mb|\
+tplink,be450-ubi|\
 tplink,tl-xdr4288|\
 tplink,tl-xdr6086|\
 tplink,tl-xdr6088|\
@@ -94,6 +99,7 @@ bananapi,bpi-r3-mini|\
 bananapi,bpi-r4|\
 bananapi,bpi-r4-lite|\
 bananapi,bpi-r4-poe|\
+bananapi,bpi-r4-pro-8x|\
 cmcc,rax3000m|\
 jdcloud,re-cp-03)
 	. /lib/upgrade/fit.sh
@@ -129,6 +135,10 @@ comfast,cf-e393ax|\
 iptime,ax3000m)
 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x20000" "0x80000"
 	;;
+comfast,cf-wa933|\
+comfast,cf-wa933-128m)
+	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x20000" "0x20000"
+	;;
 dlink,aquila-pro-ai-e30-a1|\
 dlink,aquila-pro-ai-m30-a1|\
 dlink,aquila-pro-ai-m60-a1)
@@ -140,7 +150,14 @@ gatonetworks,gdsp)
 glinet,gl-mt3000)
 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x80000" "0x20000"
 	;;
-jiorouter,ax6000-jidu6101)
+jiorouter,ax6000-jidu6101|\
+jiorouter,ax6000-jidu6j01)
+	. /lib/upgrade/nand.sh
+	envubi=$(nand_find_ubi ubi)
+	envdev=/dev/$(nand_find_volume "$envubi" u-boot-env)
+	ubootenv_add_uci_config "$envdev" "0x0" "0x80000" "0x1f000" "5"
+	;;
+ltc,vl7m19k)
 	. /lib/upgrade/nand.sh
 	envubi=$(nand_find_ubi ubi)
 	envdev=/dev/$(nand_find_volume "$envubi" u-boot-env)
@@ -150,6 +167,8 @@ openembed,som7981)
 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x80000" "0x80000"
 	ubootenv_add_uci_sys_config "/dev/mtd3" "0x0" "0x100000" "0x100000"
 	;;
+smartrg,sdg-8712|\
+smartrg,sdg-8732|\
 smartrg,sdg-8733|\
 smartrg,sdg-8733a|\
 smartrg,sdg-8734)

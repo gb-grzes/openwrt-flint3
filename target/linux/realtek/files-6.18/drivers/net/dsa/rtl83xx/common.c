@@ -6,6 +6,7 @@
 #include <net/nexthop.h>
 #include <net/neighbour.h>
 #include <net/netevent.h>
+#include <linux/cleanup.h>
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/inetdevice.h>
@@ -30,122 +31,6 @@ int rtldsa_port_get_stp_state(struct rtl838x_switch_priv *priv, int port)
 	mutex_unlock(&priv->reg_mutex);
 
 	return state;
-}
-
-static struct table_reg rtl838x_tbl_regs[] = {
-	TBL_DESC(0x6900, 0x6908, 3, 15, 13, 1),		/* RTL8380_TBL_L2 */
-	TBL_DESC(0x6914, 0x6918, 18, 14, 12, 1),	/* RTL8380_TBL_0 */
-	TBL_DESC(0xA4C8, 0xA4CC, 6, 14, 12, 1),		/* RTL8380_TBL_1 */
-
-	TBL_DESC(0x1180, 0x1184, 3, 16, 14, 0),		/* RTL8390_TBL_L2 */
-	TBL_DESC(0x1190, 0x1194, 17, 15, 12, 0),	/* RTL8390_TBL_0 */
-	TBL_DESC(0x6B80, 0x6B84, 4, 14, 12, 0),		/* RTL8390_TBL_1 */
-	TBL_DESC(0x611C, 0x6120, 9, 8, 6, 0),		/* RTL8390_TBL_2 */
-
-	TBL_DESC(0xB320, 0xB334, 3, 18, 16, 0),		/* RTL9300_TBL_L2 */
-	TBL_DESC(0xB340, 0xB344, 19, 16, 12, 0),	/* RTL9300_TBL_0 */
-	TBL_DESC(0xB3A0, 0xB3A4, 20, 16, 13, 0),	/* RTL9300_TBL_1 */
-	TBL_DESC(0xCE04, 0xCE08, 6, 14, 12, 0),		/* RTL9300_TBL_2 */
-	TBL_DESC(0xD600, 0xD604, 30, 7, 6, 0),		/* RTL9300_TBL_HSB */
-	TBL_DESC(0x7880, 0x7884, 22, 9, 8, 0),		/* RTL9300_TBL_HSA */
-
-	TBL_DESC(0x8500, 0x8508, 8, 19, 15, 0),		/* RTL9310_TBL_0 */
-	TBL_DESC(0x40C0, 0x40C4, 22, 16, 14, 0),	/* RTL9310_TBL_1 */
-	TBL_DESC(0x8528, 0x852C, 6, 18, 14, 0),		/* RTL9310_TBL_2 */
-	TBL_DESC(0x0200, 0x0204, 9, 15, 12, 0),		/* RTL9310_TBL_3 */
-	TBL_DESC(0x20dc, 0x20e0, 29, 7, 6, 0),		/* RTL9310_TBL_4 */
-	TBL_DESC(0x7e1c, 0x7e20, 53, 8, 6, 0),		/* RTL9310_TBL_5 */
-};
-
-void rtl_table_init(void)
-{
-	for (int i = 0; i < RTL_TBL_END; i++)
-		mutex_init(&rtl838x_tbl_regs[i].lock);
-}
-
-/* Request access to table t in table access register r
- * Returns a handle to a lock for that table
- */
-struct table_reg *rtl_table_get(rtl838x_tbl_reg_t r, int t)
-{
-	if (r >= RTL_TBL_END)
-		return NULL;
-
-	if (t >= BIT(rtl838x_tbl_regs[r].c_bit - rtl838x_tbl_regs[r].t_bit))
-		return NULL;
-
-	mutex_lock(&rtl838x_tbl_regs[r].lock);
-	rtl838x_tbl_regs[r].tbl = t;
-
-	return &rtl838x_tbl_regs[r];
-}
-
-/* Release a table r, unlock the corresponding lock */
-void rtl_table_release(struct table_reg *r)
-{
-	if (!r)
-		return;
-
-/*	pr_info("Unlocking %08x\n", (u32)r); */
-	mutex_unlock(&r->lock);
-/*	pr_info("Unlock done\n"); */
-}
-
-static int rtl_table_exec(struct table_reg *r, bool is_write, int idx)
-{
-	int ret = 0;
-	u32 cmd, val;
-
-	/* Read/write bit has inverted meaning on RTL838x */
-	if (r->rmode)
-		cmd = is_write ? 0 : BIT(r->c_bit);
-	else
-		cmd = is_write ? BIT(r->c_bit) : 0;
-
-	cmd |= BIT(r->c_bit + 1); /* Execute bit */
-	cmd |= r->tbl << r->t_bit; /* Table type */
-	cmd |= idx & (BIT(r->t_bit) - 1); /* Index */
-
-	sw_w32(cmd, r->addr);
-
-	ret = readx_poll_timeout(sw_r32, r->addr, val,
-				 !(val & BIT(r->c_bit + 1)), 20, 10000);
-	if (ret)
-		pr_err("%s: timeout\n", __func__);
-
-	return ret;
-}
-
-/* Reads table index idx into the data registers of the table */
-int rtl_table_read(struct table_reg *r, int idx)
-{
-	return rtl_table_exec(r, false, idx);
-}
-
-/* Writes the content of the table data registers into the table at index idx */
-int rtl_table_write(struct table_reg *r, int idx)
-{
-	return rtl_table_exec(r, true, idx);
-}
-
-/* Returns the address of the ith data register of table register r
- * the address is relative to the beginning of the Switch-IO block at 0xbb000000
- */
-inline u16 rtl_table_data(struct table_reg *r, int i)
-{
-	if (i >= r->max_data)
-		i = r->max_data - 1;
-	return r->data + i * 4;
-}
-
-inline u32 rtl_table_data_r(struct table_reg *r, int i)
-{
-	return sw_r32(rtl_table_data(r, i));
-}
-
-inline void rtl_table_data_w(struct table_reg *r, u32 v, int i)
-{
-	sw_w32(v, rtl_table_data(r, i));
 }
 
 /* Port register accessor functions for the RTL838x and RTL930X SoCs */
@@ -251,12 +136,11 @@ static bool rtldsa_phys_load_deferred(void)
 	return false;
 }
 
-static int rtl83xx_mdio_probe(struct rtl838x_switch_priv *priv)
+static int rtldsa_mdio_loaded(void)
 {
-	struct device_node *dn, *phy_node, *led_node;
-	u32 pn;
+	struct device_node *dn;
 
-	/* Check if all busses of Realtek mdio controller are registered */
+	/* Check if all buses of the Realtek MDIO controller are registered. */
 	dn = of_find_compatible_node(NULL, NULL, "realtek,otto-mdio");
 	if (!of_device_is_available(dn)) {
 		of_node_put(dn);
@@ -265,6 +149,7 @@ static int rtl83xx_mdio_probe(struct rtl838x_switch_priv *priv)
 
 	for_each_child_of_node_scoped(dn, bn) {
 		struct mii_bus *bus = of_mdio_find_bus(bn);
+
 		if (!bus) {
 			of_node_put(dn);
 			return -EPROBE_DEFER;
@@ -272,6 +157,14 @@ static int rtl83xx_mdio_probe(struct rtl838x_switch_priv *priv)
 		put_device(&bus->dev);
 	}
 	of_node_put(dn);
+
+	return 0;
+}
+
+static int rtldsa_ports_probe(struct rtl838x_switch_priv *priv)
+{
+	struct device_node *dn, *phy_node, *led_node;
+	u32 pn;
 
 	dn = of_find_compatible_node(NULL, NULL, "realtek,otto-switch");
 	if (!dn) {
@@ -316,13 +209,6 @@ static int rtl83xx_mdio_probe(struct rtl838x_switch_priv *priv)
 		priv->ports[pn].phy = !!phy_node;
 	}
 
-	/* Disable MAC polling the PHY so that we can start configuration */
-	priv->r->set_port_reg_le(0ULL, priv->r->smi_poll_ctrl);
-
-	/* Disable PHY polling via SoC */
-	if (priv->family_id == RTL8390_FAMILY_ID)
-		sw_w32_mask(BIT(7), 0, RTL839X_SMI_GLB_CTRL);
-
 	return 0;
 }
 
@@ -330,12 +216,17 @@ static int rtl83xx_get_l2aging(struct rtl838x_switch_priv *priv)
 {
 	int t = sw_r32(priv->r->l2_ctrl_1);
 
-	t &= priv->family_id == RTL8380_FAMILY_ID ? 0x7fffff : 0x1FFFFF;
-
-	if (priv->family_id == RTL8380_FAMILY_ID)
-		t = t * 128 / 625; /* Aging time in seconds. 0: L2 aging disabled */
-	else
-		t = (t * 3) / 5;
+	/* RTL838x uses a high-resolution 23-bit AGE_UNIT where one unit is
+	 * 204.8 ms. RTL839x and RTL93xx use a 21-bit AGE_UNIT where one unit
+	 * is 600 ms. An AGE_UNIT value of 0 disables dynamic address aging.
+	 */
+	if (priv->r->high_res_l2_age) {
+		t &= GENMASK(22, 0);
+		t = t * 128 / 625;
+	} else {
+		t &= GENMASK(20, 0);
+		t = t * 3 / 5;
+	}
 
 	pr_debug("L2 AGING time: %d sec\n", t);
 	pr_debug("Dynamic aging for ports: %x\n", sw_r32(priv->r->l2_port_aging_out));
@@ -503,16 +394,13 @@ static int rtldsa_93xx_lag_set_group2ports(struct rtl838x_switch_priv *priv, int
 	int i;
 
 	/* Read lag table using Table control register 2 */
-	struct table_reg *r = priv->r->lag_table();
+	int tbl = priv->r->lag_table();
 
-	rtl_table_read(r, group);
+	__otto_table_read(tbl, group, &data);
 
 	bitmap_clear(ports, 0, ARRAY_SIZE(priv->ports));
 	bitmap_from_arr64(ports, &priv->lags_port_members[group],
 			  ARRAY_SIZE(priv->ports));
-
-	for (i = 0; i < 3; i++)
-		data[i] = sw_r32(rtl_table_data(r, i));
 
 	priv->r->lag_fill_data(data, &e);
 
@@ -521,6 +409,7 @@ static int rtldsa_93xx_lag_set_group2ports(struct rtl838x_switch_priv *priv, int
 		pr_err("%s: Number of LAG ports too high: %u", __func__,
 		       num_of_lag_ports);
 
+		otto_table_release(tbl);
 		return -ENOSPC;
 	}
 
@@ -568,16 +457,15 @@ static int rtldsa_93xx_lag_set_group2ports(struct rtl838x_switch_priv *priv, int
 			e.ip4_hash_mask_idx = RTL93XX_HASH_MASK_INDEX_L23;
 			e.ip6_hash_mask_idx = RTL93XX_HASH_MASK_INDEX_L23;
 		} else {
+			otto_table_release(tbl);
 			return -EOPNOTSUPP;
 		}
 	}
 
 	priv->r->lag_write_data(data, &e);
 
-	for (i = 0; i < 3; i++)
-		sw_w32(data[i], rtl_table_data(r, i));
-	rtl_table_write(r, group);
-	rtl_table_release(r);
+	__otto_table_write(tbl, group, &data);
+	otto_table_release(tbl);
 
 	return 0;
 }
@@ -656,38 +544,77 @@ int rtldsa_93xx_lag_set_port_members(struct rtl838x_switch_priv *priv, int group
 // 	return idx;
 // }
 
-/* Allocate a 32-bit packet counter
- * 2 32-bit packet counters share the location of a 64-bit octet counter
- * Initially there are no free packet counters and 2 new ones need to be freed
- * by allocating the corresponding octet counter
+/*
+ * Packet counters share hardware memory with octet counters (2 packet counters
+ * per 1 octet block). Allocation relies on two complementary bitmaps:
+ *
+ *   octet_cntr_use_bm:  0 = free block, 1 = used (or split into packet counters)
+ *   packet_cntr_use_bm: 1 = free standalone counter, 0 = unavailable
+ *
+ * Allocation strategy:
+ * 1. Look for a free standalone counter from an already split block (bit = 1).
+ * 2. If none are free, claim a new octet block 'j', use counter index (2 * j),
+ *    and mark counter (2 * j + 1) as available for future allocations.
  */
-int rtl83xx_packet_cntr_alloc(struct rtl838x_switch_priv *priv)
+
+/**
+ * rtldsa_packet_cntr_alloc - Allocate a hardware packet counter.
+ * @priv: Switch driver private structure.
+ *
+ * Return: Counter index (>= 0) on success, or -1 if full.
+ */
+int rtldsa_packet_cntr_alloc(struct rtl838x_switch_priv *priv)
 {
 	int idx, j;
 
-	mutex_lock(&priv->reg_mutex);
+	scoped_guard(mutex, &priv->reg_mutex) {
+		idx = find_first_bit(priv->packet_cntr_use_bm, priv->r->n_counters * 2);
+		if (idx >= priv->r->n_counters * 2) {
+			j = find_first_zero_bit(priv->octet_cntr_use_bm, priv->r->n_counters);
+			if (j >= priv->r->n_counters)
+				return -1;
 
-	/* Because initially no packet counters are free, the logic is reversed:
-	 * a 0-bit means the counter is already allocated (for octets)
-	 */
-	idx = find_first_bit(priv->packet_cntr_use_bm, MAX_COUNTERS * 2);
-	if (idx >= priv->r->n_counters * 2) {
-		j = find_first_zero_bit(priv->octet_cntr_use_bm, MAX_COUNTERS);
-		if (j >= priv->r->n_counters) {
-			mutex_unlock(&priv->reg_mutex);
-			return -1;
+			__set_bit(j, priv->octet_cntr_use_bm);
+			idx = j * 2;
+			__set_bit(j * 2 + 1, priv->packet_cntr_use_bm);
+		} else {
+			__clear_bit(idx, priv->packet_cntr_use_bm);
 		}
-		set_bit(j, priv->octet_cntr_use_bm);
-		idx = j * 2;
-		set_bit(j * 2 + 1, priv->packet_cntr_use_bm);
-
-	} else {
-		clear_bit(idx, priv->packet_cntr_use_bm);
 	}
 
-	mutex_unlock(&priv->reg_mutex);
-
 	return idx;
+}
+
+/**
+ * rtldsa_packet_cntr_free - Release a packet counter from rtldsa_packet_cntr_alloc().
+ * @priv: Switch driver private structure.
+ * @idx: Packet counter index to free; a negative id is ignored.
+ *
+ * Marks the counter free again and, once both halves of its octet block are
+ * free, returns the whole block to the octet counter pool.
+ */
+void rtldsa_packet_cntr_free(struct rtl838x_switch_priv *priv, int idx)
+{
+	int j;
+
+	if (idx < 0 || idx >= priv->r->n_counters * 2)
+		return;
+
+	scoped_guard(mutex, &priv->reg_mutex) {
+		/* already free - guard against a double release */
+		if (test_bit(idx, priv->packet_cntr_use_bm))
+			return;
+
+		__set_bit(idx, priv->packet_cntr_use_bm);
+
+		j = idx / 2;
+		if (test_bit(j, priv->octet_cntr_use_bm) &&
+		    test_bit(idx ^ 1, priv->packet_cntr_use_bm)) {
+			__clear_bit(idx, priv->packet_cntr_use_bm);
+			__clear_bit(idx ^ 1, priv->packet_cntr_use_bm);
+			__clear_bit(j, priv->octet_cntr_use_bm);
+		}
+	}
 }
 
 /* Add an L2 nexthop entry for the L3 routing system / PIE forwarding in the SoC
@@ -885,7 +812,7 @@ static int rtl83xx_sw_probe(struct platform_device *pdev)
 		return err;
 
 	/* Initialize access to RTL switch tables */
-	rtl_table_init();
+	otto_table_init();
 
 	r = device_get_match_data(&pdev->dev);
 	priv = devm_kzalloc(dev, struct_size(priv, msts, r->n_mst - 1), GFP_KERNEL);
@@ -921,13 +848,13 @@ static int rtl83xx_sw_probe(struct platform_device *pdev)
 	sw_w32(0, priv->r->spanning_tree_ctrl);
 	priv->irq_mask = GENMASK_ULL(priv->r->cpu_port - 1, 0);
 
-	err = rtl83xx_mdio_probe(priv);
-	if (err) {
-		/* Probing fails the 1st time because of missing ethernet driver
-		 * initialization. Use this to disable traffic in case the bootloader left if on
-		 */
+	err = rtldsa_mdio_loaded();
+	if (err)
 		return err;
-	}
+
+	err = rtldsa_ports_probe(priv);
+	if (err)
+		return err;
 
 	priv->wq = create_singlethread_workqueue("rtl83xx");
 	if (!priv->wq) {
@@ -1006,6 +933,7 @@ static int rtl83xx_sw_probe(struct platform_device *pdev)
 err_register_l3:
 	dsa_switch_shutdown(priv->ds);
 err_register_switch:
+	rtldsa_tc_cleanup(priv);
 	destroy_workqueue(priv->wq);
 
 	return err;
@@ -1054,6 +982,8 @@ static void rtl83xx_sw_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&priv->counters_work);
 
 	dsa_switch_shutdown(priv->ds);
+
+	rtldsa_tc_cleanup(priv);
 
 	destroy_workqueue(priv->wq);
 
