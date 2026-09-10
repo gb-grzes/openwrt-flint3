@@ -1,0 +1,194 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-fancontrol 2.0.0\n"
+"PO-Revision-Date: 2026-09-02 18:00+0200\n"
+"Last-Translator: Grzesiek\n"
+"Language-Team: Polish\n"
+"Language: pl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+msgid "None"
+msgstr "Brak"
+
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgid "PWM output"
+msgstr "Wyjście PWM"
+
+msgid "Fan speed"
+msgstr "Prędkość wentylatora"
+
+msgid "Runtime Status"
+msgstr "Stan pracy"
+
+msgid "Running"
+msgstr "Uruchomiony"
+
+msgid "Stopped"
+msgstr "Zatrzymany"
+
+msgid "Temperature input"
+msgstr "Źródło temperatury"
+
+msgid "PWM device"
+msgstr "Urządzenie PWM"
+
+msgid "Fault"
+msgstr "Błąd"
+
+msgid "Collecting data..."
+msgstr "Pobieranie danych..."
+
+msgid "Fan Control"
+msgstr "Sterowanie wentylatorem"
+
+msgid "Configure a continuous PWM curve based on device temperature. Automatic hardware detection is suitable for most devices."
+msgstr "Konfiguracja ciągłej charakterystyki PWM zależnej od temperatury urządzenia. Automatyczne wykrywanie sprzętu jest odpowiednie dla większości urządzeń."
+
+msgid "Settings"
+msgstr "Ustawienia"
+
+msgid "Temperature Curve"
+msgstr "Charakterystyka temperatury"
+
+msgid "Controls the minimum PWM and how fan speed rises with temperature."
+msgstr "Określa minimalne PWM oraz sposób zwiększania prędkości wentylatora wraz ze wzrostem temperatury."
+
+msgid "Hardware"
+msgstr "Sprzęt"
+
+msgid "Automatic detection works on most devices. Select explicit sysfs entries only when necessary."
+msgstr "Automatyczne wykrywanie działa na większości urządzeń. Ręczne wskazanie wpisów sysfs jest potrzebne tylko w razie konieczności."
+
+msgid "Safety"
+msgstr "Bezpieczeństwo"
+
+msgid "Controls startup assistance and fail-safe behavior. Full-speed safety defaults are recommended."
+msgstr "Konfiguruje wspomaganie rozruchu oraz zachowanie awaryjne. Zalecane jest pozostawienie zabezpieczenia z pełną prędkością."
+
+msgid "Enable"
+msgstr "Włącz"
+
+msgid "Run the controller and apply this temperature curve."
+msgstr "Uruchamia sterownik i stosuje tę charakterystykę temperatury."
+
+msgid "Start temperature"
+msgstr "Temperatura początkowa"
+
+msgid "Below this temperature the fan runs continuously at the configured minimum PWM. Unit: °C."
+msgstr "Poniżej tej temperatury wentylator pracuje stale z ustawionym minimalnym PWM. Jednostka: °C."
+
+msgid "Full-speed temperature"
+msgstr "Temperatura pełnej prędkości"
+
+msgid "Stop hysteresis"
+msgstr "Histereza zatrzymania"
+
+msgid "After starting, the fan stops only after temperature falls this many degrees below the start temperature. This prevents rapid on/off cycling."
+msgstr "Po uruchomieniu wentylator zatrzymuje się dopiero, gdy temperatura spadnie o podaną liczbę stopni poniżej temperatury początkowej. Zapobiega to częstemu włączaniu i wyłączaniu."
+
+msgid "PWM rises linearly and reaches the configured maximum at this temperature. Unit: °C."
+msgstr "PWM zwiększa się liniowo i osiąga ustawioną wartość maksymalną przy tej temperaturze. Jednostka: °C."
+
+msgid "Full-speed temperature must be higher than start temperature."
+msgstr "Temperatura pełnej prędkości musi być wyższa od temperatury początkowej."
+
+msgid "Minimum running PWM"
+msgstr "Minimalne PWM"
+
+msgid "Minimum continuous PWM. The fan never stops; this value is used below the start temperature. Range: 1–255."
+msgstr "Minimalne ciągłe PWM. Wentylator nigdy się nie zatrzymuje; ta wartość jest używana poniżej temperatury początkowej. Zakres: 1–255."
+
+msgid "Maximum PWM"
+msgstr "Maksymalne PWM"
+
+msgid "Highest PWM allowed by the curve. A value of 255 means 100% duty cycle."
+msgstr "Najwyższa wartość PWM dozwolona przez charakterystykę. Wartość 255 oznacza 100% wypełnienia."
+
+msgid "Maximum PWM must not be lower than minimum running PWM."
+msgstr "Maksymalne PWM nie może być niższe od minimalnego PWM."
+
+msgid "Polling interval"
+msgstr "Interwał odczytu"
+
+msgid "How often the temperature is read and the PWM output is updated. Unit: seconds."
+msgstr "Jak często odczytywana jest temperatura i aktualizowane jest wyjście PWM. Jednostka: sekundy."
+msgstr "Źródło temperatury"
+
+msgid "Use \"auto\" to select a CPU or SoC thermal sensor, or enter an absolute thermal zone or hwmon tempN_input path."
+msgstr "Użyj „auto”, aby automatycznie wybrać czujnik temperatury CPU lub SoC, albo podaj bezwzględną ścieżkę thermal zone lub hwmon tempN_input."
+
+msgid "Thermal zone type"
+msgstr "Typ strefy termicznej"
+
+msgid "Preferred thermal zone type when temperature input is automatic, for example cpu_top_thermal. Leave as \"auto\" unless several sensors are available."
+msgstr "Preferowany typ strefy termicznej przy automatycznym wyborze źródła temperatury, np. cpu-top-thermal. Pozostaw „auto”, chyba że dostępnych jest kilka czujników."
+
+msgstr "Wyjście PWM"
+
+msgid "Use \"auto\" to select a writable hwmon pwmN output, or enter its absolute path. cooling_device cur_state is not a PWM output."
+msgstr "Użyj „auto”, aby automatycznie wybrać zapisywalne wyjście hwmon pwmN, albo podaj jego bezwzględną ścieżkę. cooling_device cur_state nie jest wyjściem PWM."
+
+msgid "Hwmon device name"
+msgstr "Nazwa urządzenia hwmon"
+
+msgid "Preferred hwmon name when PWM output is automatic. The pwmfan driver is preferred by default."
+msgstr "Preferowana nazwa urządzenia hwmon przy automatycznym wyborze wyjścia PWM. Domyślnie preferowany jest sterownik pwmfan."
+
+msgid "PWM mode control"
+msgstr "Sterowanie trybem PWM"
+
+msgid "Optional pwmN_enable path used to select manual PWM mode. With \"auto\", the matching control is used when available."
+msgstr "Opcjonalna ścieżka pwmN_enable używana do wyboru ręcznego trybu PWM. Przy ustawieniu „auto” używane jest odpowiednie sterowanie, jeśli jest dostępne."
+
+msgid "Temperature divisor"
+msgstr "Dzielnik temperatury"
+
+msgid "Divides the raw sensor value before control calculations. Standard Linux temperature inputs use 1000; sensors reporting whole degrees use 1."
+msgstr "Dzieli surową wartość czujnika przed wykonaniem obliczeń sterowania. Standardowe wejścia temperatury Linuksa używają 1000; czujniki podające pełne stopnie używają 1."
+
+msgid "Start kick PWM"
+msgstr "PWM rozruchowe"
+
+msgid "Brief PWM applied when a stopped fan starts. It helps fans that cannot start reliably at low duty. Set to 0 together with a zero duration to disable."
+msgstr "Krótkotrwałe PWM stosowane podczas uruchamiania wentylatora. Pomaga w przypadku wentylatorów, które nie uruchamiają się niezawodnie przy niskim wypełnieniu. Aby wyłączyć, ustaw 0 oraz czas trwania 0."
+
+msgid "Start kick duration"
+msgstr "Czas PWM rozruchowego"
+
+msgid "How long the startup kick is applied. Unit: milliseconds."
+msgstr "Jak długo stosowane jest PWM rozruchowe. Jednostka: milisekundy."
+
+msgid "Start kick PWM must be non-zero when a kick duration is configured."
+msgstr "PWM rozruchowe musi być różne od zera, jeśli ustawiono czas jego działania."
+
+msgid "Sensor failure PWM"
+msgstr "PWM przy awarii czujnika"
+
+msgid "PWM used when the temperature sensor cannot be read. Keeping 255 is the safest choice."
+msgstr "PWM używane, gdy nie można odczytać czujnika temperatury. Wartość 255 jest najbezpieczniejszym ustawieniem."
+
+msgid "Service exit PWM"
+msgstr "PWM po zatrzymaniu usługi"
+
+msgid "PWM written when the service stops. Keeping the fan at full speed avoids losing cooling after an unexpected exit."
+msgstr "PWM zapisywane po zatrzymaniu usługi. Utrzymanie pełnej prędkości wentylatora zapobiega utracie chłodzenia po nieoczekiwanym zakończeniu usługi."
+
+msgid "Debug logging"
+msgstr "Logowanie diagnostyczne"
+
+msgid "Write temperature, PWM and RPM values to the system log at every polling interval."
+msgstr "Zapisuje temperaturę, PWM i RPM w logu systemowym przy każdym odczycie."
+
+msgid "Enter \"auto\" or an absolute sysfs path."
+msgstr "Wpisz „auto” lub bezwzględną ścieżkę sysfs."
+
+msgid "Grant access to Fan Control"
+msgstr "Zezwól na dostęp do sterowania wentylatorem"
+
+msgid "Fan device"
+msgstr "Urządzenie wentylatora"

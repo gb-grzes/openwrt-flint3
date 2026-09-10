@@ -1,0 +1,21 @@
+{
+	"luci-app-fancontrol": {
+		"description": "Grant access to Fan Control",
+		"read": {
+			"uci": [ "fancontrol" ],
+			"ubus": {
+				"service": [ "list" ]
+			},
+			"file": {
+				"/etc/config/fancontrol": [ "read" ],
+				"/var/run/fancontrol.status": [ "read" ]
+			}
+		},
+		"write": {
+			"uci": [ "fancontrol" ],
+			"file": {
+				"/etc/config/fancontrol": [ "write" ]
+			}
+		}
+	}
+}

@@ -118,7 +118,7 @@
 			interrupt-parent = <&tlmm>;
 			interrupts = <36 IRQ_TYPE_EDGE_RISING>;
 			pulses-per-revolution = <2>;
-			cooling-levels = <36 128 192 255>;
+			cooling-levels = <38 75 155 255>;
 			#cooling-cells = <2>;
 		};
 

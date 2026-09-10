@@ -1,0 +1,46 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pl\n"
+
+msgid "(%d minute window, %d second interval)"
+msgstr "(okno %d minut, interwał %d sekund)"
+
+msgid "Average:"
+msgstr "Średnia:"
+
+msgid "Fan"
+msgstr "Wentylator"
+
+msgid "Hide"
+msgstr "Ukryj"
+
+msgid "Hot:"
+msgstr "Wysoka temperatura:"
+
+msgid "Minimum:"
+msgstr "Minimum:"
+
+msgid "No temperature sensors available"
+msgstr "Brak dostępnych czujników temperatury"
+
+msgid "Overheat:"
+msgstr "Przegrzanie:"
+
+msgid "Peak:"
+msgstr "Szczyt:"
+
+msgid "Sensor"
+msgstr "Czujnik"
+
+msgid "Show hidden sensors"
+msgstr "Pokaż ukryte czujniki"
+
+msgid "Switch view"
+msgstr "Przełącz widok"
+
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgid "This page displays the temperature sensors data."
+msgstr "Ta strona wyświetla dane z czujników temperatury."
