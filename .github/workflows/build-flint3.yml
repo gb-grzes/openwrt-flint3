@@ -1,0 +1,62 @@
+name: Build Flint 3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - flint3-be9300
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            flex \
+            bison \
+            gawk \
+            gettext \
+            git \
+            libncurses-dev \
+            libssl-dev \
+            python3 \
+            python3-setuptools \
+            rsync \
+            swig \
+            unzip \
+            zlib1g-dev \
+            file \
+            wget
+
+      - name: Update feeds
+        run: ./scripts/feeds update -a
+
+      - name: Install and clean feeds
+        run: ./scripts/feeds-cleanup
+
+      - name: Load Flint 3 configuration
+        run: |
+          cp configs/flint3-be9300.config .config
+          make defconfig
+
+      - name: Download sources
+        run: make download -j$(nproc)
+
+      - name: Build firmware
+        run: make -j$(nproc) V=s
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: flint3-be9300-firmware
+          path: bin/targets/qualcommbe/ipq53xx/*
+          if-no-files-found: error
+          retention-days: 14
