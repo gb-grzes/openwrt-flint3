@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+echo "==> Installing all feeds"
+./scripts/feeds install -a
+
+echo "==> Removing packages with unavailable dependencies"
+./scripts/feeds uninstall \
+    bmx7-dnsupdate \
+    luci-app-bmx7 \
+    luci-app-dcwapd \
+    luci-app-librespeed \
+    prometheus-node-exporter-lua
+
+echo "==> Feed cleanup complete"
