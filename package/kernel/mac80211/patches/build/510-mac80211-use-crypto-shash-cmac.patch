@@ -5,16 +5,6 @@ Reverse upstream commit c9de7246d542 ("wifi: mac80211: Use AES-CMAC
 library in ieee80211_aes_cmac()") because the AES-CMAC library API is not
 available in Linux 6.18.
 
---- a/net/mac80211/Kconfig
-+++ b/net/mac80211/Kconfig
-@@ -4,7 +4,6 @@ config MAC80211
- 	depends on m
- 	depends on CFG80211
- 	depends on CRYPTO
--	depends on CRYPTO_LIB_AES_CBC_MACS
- 	select BPAUTO_CRYPTO_LIB_ARC4
- 	depends on CRYPTO_AES
- 	depends on CRYPTO_CCM
 --- a/net/mac80211/aes_cmac.c
 +++ b/net/mac80211/aes_cmac.c
 @@ -7,9 +7,10 @@
