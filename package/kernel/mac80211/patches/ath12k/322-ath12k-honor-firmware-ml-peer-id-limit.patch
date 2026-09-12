@@ -50,6 +50,7 @@ Signed-off-by: JiaY-shi <shi05275@163.com>
 +	u16 last_ml_peer_id;
 
  	struct ath12k_dp_hw dp_hw;
+
 --- a/drivers/net/wireless/ath/ath12k/mac.c
 +++ b/drivers/net/wireless/ath/ath12k/mac.c
 @@ -15380,6 +15380,7 @@ static struct ath12k_hw *ath12k_mac_hw_a
@@ -59,9 +60,11 @@ Signed-off-by: JiaY-shi <shi05275@163.com>
 +	ah->max_ml_peer_ids = ATH12K_MAX_MLO_PEERS;
 
  	mutex_init(&ah->hw_mutex);
+
 --- a/drivers/net/wireless/ath/ath12k/peer.c
 +++ b/drivers/net/wireless/ath/ath12k/peer.c
 @@ -329,20 +329,25 @@
+
  u16 ath12k_peer_ml_alloc(struct ath12k_hw *ah)
  {
 -	u16 ml_peer_id;
@@ -93,6 +96,7 @@ Signed-off-by: JiaY-shi <shi05275@163.com>
 -	return ml_peer_id;
 +	return ATH12K_MLO_PEER_ID_INVALID;
  }
+
 --- a/drivers/net/wireless/ath/ath12k/wmi.c
 +++ b/drivers/net/wireless/ath/ath12k/wmi.c
 @@ -9602,24 +9602,51 @@ static void ath12k_wmi_gtk_offload_statu
