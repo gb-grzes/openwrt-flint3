@@ -85,10 +85,11 @@ the release when the ID is quarantined.]
  		       bool skip_fw_delete);
  int ath12k_peer_create(struct ath12k *ar, struct ath12k_link_vif *arvif,
  		       struct ieee80211_sta *sta,
-@@ -37,4 +37,6 @@
+@@ -37,5 +37,7 @@
  struct ath12k_link_sta *ath12k_link_sta_find_by_addr(struct ath12k_base *ab,
  						     const u8 *addr);
  u16 ath12k_peer_ml_alloc(struct ath12k_hw *ah);
+ void ath12k_peer_ml_free(struct ath12k_hw *ah, struct ath12k_sta *ahsta);
 +void ath12k_peer_ml_quarantine(struct ath12k_hw *ah,
 +			       struct ath12k_sta *ahsta, int reason);
  #endif /* _PEER_H_ */
@@ -381,27 +382,13 @@ the release when the ID is quarantined.]
  
  	/* validate link station removal and clear arsta links */
  	links = ahsta->links_map;
-@@ -7348,8 +7379,12 @@
+@@ -7348,6 +7379,9 @@
  		ath12k_mac_free_unassign_link_sta(ah, ahsta, link_id);
  	}
  
 +	if (ret && !is_recovery)
 +		ath12k_peer_ml_quarantine(ah, ahsta, ret);
 +
- 	if (sta->mlo) {
--		clear_bit(ahsta->ml_peer_id, ah->free_ml_peer_id_map);
-+		if (!test_bit(ahsta->ml_peer_id, ah->quarantined_ml_peer_id_map))
-+			clear_bit(ahsta->ml_peer_id, ah->free_ml_peer_id_map);
- 		ahsta->ml_peer_id = ATH12K_MLO_PEER_ID_INVALID;
- 	}
+ 	if (sta->mlo)
+ 		ath12k_peer_ml_free(ah, ahsta);
  }
-@@ -7973,7 +8008,8 @@
- 	ath12k_dp_peer_delete(&ah->dp_hw, sta->addr, sta);
- ml_peer_id_clear:
- 	if (sta->mlo) {
--		clear_bit(ahsta->ml_peer_id, ah->free_ml_peer_id_map);
-+		if (!test_bit(ahsta->ml_peer_id, ah->quarantined_ml_peer_id_map))
-+			clear_bit(ahsta->ml_peer_id, ah->free_ml_peer_id_map);
- 		ahsta->ml_peer_id = ATH12K_MLO_PEER_ID_INVALID;
- 	}
- exit:
