@@ -599,6 +599,17 @@ export function generate(interface, data, config, vlans, stas, phy_features) {
 
 	iface_eap_server(config);
 
+	/*
+	 * hostapd's FT implementation identifies an AP by its BSSID and has no
+	 * MLD awareness.  Advertising FT on an AP MLD therefore creates roaming
+	 * credentials for a single link instead of the MLD, which breaks 802.11r
+	 * clients.  Keep MLO available and disable only the incompatible feature.
+	 */
+	if (config.mlo && config.ieee80211r) {
+		comment('802.11r disabled: Fast Transition is incompatible with MLO');
+		config.ieee80211r = false;
+	}
+
 	iface_roaming(config);
 
 	iface_mfp(config);
