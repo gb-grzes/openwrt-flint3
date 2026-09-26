@@ -17,6 +17,10 @@
 
 	aliases {
 		serial0 = &blsp1_uart0;
+		led-boot = &led_white;
+		led-failsafe = &led_white;
+		led-running = &led_blue;
+		led-upgrade = &led_white;
 	};
 
 	chosen {
@@ -83,16 +87,16 @@
 			pinctrl-names = "default";
 			status = "okay";
 
-			led@32 {
+			led_blue: led@32 {
 				label = "blue:run";
 				gpios = <&tlmm 32 GPIO_ACTIVE_HIGH>;
-				default-state = "on";
+				default-state = "off";
 			};
 
-			led@33 {
+			led_white: led@33 {
 				label = "white:system";
 				gpios = <&tlmm 33 GPIO_ACTIVE_HIGH>;
-				default-state = "off";
+				default-state = "on";
 			};
 		};
 
