@@ -7,7 +7,10 @@
 #define __RTL8372_COMMON_H__
 
 #include <linux/of_mdio.h>
+#include <linux/netdevice.h>
+#include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/debugfs.h>
 #include <net/dsa.h>
@@ -56,6 +59,26 @@ struct rtl837x_sdsmode_map {
 	const char *name;
 };
 
+struct rtl837x_mib_snapshot {
+	u64 rx_octets;
+	u64 tx_octets;
+	u64 rx_ucast_pkts;
+	u64 rx_mcast_pkts;
+	u64 rx_bcast_pkts;
+	u64 tx_ucast_pkts;
+	u64 tx_mcast_pkts;
+	u64 tx_bcast_pkts;
+	u32 tx_discards; /* RTL8373 ifOutDiscards is 32-bit. */
+	u32 collisions; /* RTL8373 tx_etherStatsCollisions is 32-bit. */
+};
+
+struct rtl837x_port_stats {
+	spinlock_t lock;
+	struct rtnl_link_stats64 stats;
+	struct rtl837x_mib_snapshot snapshot;
+	bool snapshot_valid;
+};
+
 typedef struct rtl837x_pnswap_cfg_s {
 	uint8_t sds0_rx_swap:1;
 	uint8_t sds0_tx_swap:1;
@@ -75,6 +98,7 @@ struct rtk_gsw {
 	struct regmap		*map;
 	struct regmap		*map_nolock;
 	struct mutex		map_lock;
+	struct mutex		flood_lock;
 
 	struct gpio_desc *reset_pin;
 	int mdio_addr;
@@ -92,6 +116,22 @@ struct rtk_gsw {
 	rtk_sds_mode_t sds1mode;
 	rtl837x_pnswap_cfg_t swap_cfg;
 
+	/* DSA tag protocol in use. RTL8_4 (the chip's own 0x8899 CPU tag, the
+	 * default) keeps per-port identity precise; the PPE conduit driver
+	 * aliases the tag in its parser so hardware offload is unaffected.
+	 * VSC73XX_8021Q carries identity in a VLAN tag instead and stays
+	 * switchable at runtime via .change_tag_protocol as the fallback.
+	 */
+	enum dsa_tag_protocol tag_proto;
+	/* Set only while .change_tag_protocol is unwinding the outgoing tagger.
+	 * Lets rtl837x_tag_8021q_vlan_del() drop standalone VIDs it would
+	 * otherwise deliberately keep alive for the link-local carve-out --
+	 * those VIDs are meaningless once tag_8021q is gone, and leaving them
+	 * behind means the switch keeps classifying by tag_8021q's VLANs while
+	 * the new tagger is in use.
+	 */
+	bool tag_proto_changing;
+
 	unsigned int cpu_port;
 	unsigned int legacy_cpu_port;
 	bool cpu_port_from_dsa;
@@ -100,7 +140,17 @@ struct rtk_gsw {
 	bool dsa_registered;
 	struct dsa_switch ds;
 	struct net_device *bridge_dev[RTK_MAX_NUM_OF_PORT];
-	bool port_enabled[RTK_MAX_NUM_OF_PORT];
+	/* Hardware-indexed mask of ports with BR_ISOLATED enabled. */
+	u32 isolated_port_mask;
+	struct mutex isolation_lock;
+	/* RTL837x has one global mirror destination and separate RX/TX masks. */
+	int mirror_port;
+	u32 mirror_rx_mask;
+	u32 mirror_tx_mask;
+	unsigned int mirror_rx_refcnt[RTK_MAX_NUM_OF_PORT];
+	unsigned int mirror_tx_refcnt[RTK_MAX_NUM_OF_PORT];
+	bool mirror_direction_valid;
+	bool mirror_ingress;
 	struct net_device *ethernet_master;
 	struct sfp_bus *sfp_bus;
 
@@ -130,6 +180,9 @@ struct rtk_gsw {
 
 	int default_work_delay_ms;
 	struct delayed_work status_check_work;
+	struct delayed_work stats_work;
+	struct rtl837x_port_stats port_stats[RTK_MAX_NUM_OF_PORT];
+	bool stats_work_stopping;
 };
 
 extern int rtl8372n_hw_init(struct rtk_gsw *gsw, rtl837x_pnswap_cfg_t swap_cfg);

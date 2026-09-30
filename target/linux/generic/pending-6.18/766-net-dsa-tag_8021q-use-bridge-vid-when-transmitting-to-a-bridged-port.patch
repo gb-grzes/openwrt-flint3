@@ -1,0 +1,101 @@
+From: Kamil Bienkiewicz <perceivalpercy@gmail.com>
+Subject: [PATCH] net: dsa: tag_vsc73xx_8021q: use the bridge VID when
+ transmitting directly to a bridged port
+
+Joining a bridge replaces a port's standalone tag_8021q VLAN with the
+bridge's VLAN (dsa_tag_8021q_bridge_join() adds the bridge VID and
+deletes the standalone one). The xmit path, however, only uses the
+bridge VID when skb->offload_fwd_mark is set, and otherwise tags with
+the standalone VID -- a VID the switch no longer has for that port, so
+the frame is dropped.
+
+That is not reachable while everything goes through the bridge, because
+bridge-forwarded frames carry the mark. It is reachable as soon as
+something transmits straight onto the user port instead: the netfilter
+flowtable's direct transmit path does exactly this once
+dev_fill_forward_path() has resolved a bridge port, and every packet of
+such a flow is then lost.
+
+Measured on an IPQ5332 board with an RTL8372N switch (rtl837x, which
+reuses this tagger): with the flowtable forwarding through the bridge,
+frames towards the client carry the bridge VID 3088 and arrive; with the
+flowtable transmitting directly to the port, they carry the standalone
+VID 3076 and the client receives nothing, while the switch's own FDB has
+the client on a different port entirely.
+
+So for an unmarked frame to a port of a VLAN-unaware bridge, use the
+bridge VID as well and let the switch select the egress port from its own
+FDB, exactly as it does for bridge-forwarded traffic.
+
+Everything else is left as it was. Marked frames keep their existing
+handling in full: the bridge transmits only one copy per offloaded
+hardware domain and relies on the switch to flood it, so they must not be
+narrowed to a single port. VLAN-aware bridges are untouched as well --
+there every frame carries one of the bridge's own VLANs and tag_8021q
+does not decide the egress port.
+
+Link-local traffic (STP, LLDP, EAPOL, PTP peer-delay) is excluded from
+the new case, because it is addressed to one specific link and must keep
+the precise targeting the standalone VID gives it, the way tag_sja1105.c
+tests skb->offload_fwd_mark first and only then carves link-local frames
+out of its own imprecise path. For that to work the standalone VLAN has
+to stay present in hardware while the port is bridged; the rtl837x driver
+keeps it (the port's PVID is the bridge VLAN, so ingress classification
+and isolation are unchanged).
+
+Signed-off-by: Kamil Bienkiewicz <perceivalpercy@gmail.com>
+---
+--- a/net/dsa/tag_vsc73xx_8021q.c
++++ b/net/dsa/tag_vsc73xx_8021q.c
+@@ -2,6 +2,7 @@
+ /* Copyright (C) 2024 Pawel Dembicki <paweldembicki@gmail.com>
+  */
+ #include <linux/dsa/8021q.h>
++#include <linux/etherdevice.h>
+ 
+ #include "tag.h"
+ #include "tag_8021q.h"
+@@ -13,17 +14,40 @@
+ {
+ 	struct dsa_port *dp = dsa_user_to_port(netdev);
+ 	u16 queue_mapping = skb_get_queue_mapping(skb);
++	unsigned int bridge_num = dsa_port_bridge_num_get(dp);
++	struct net_device *br = dsa_port_bridge_dev_get(dp);
+ 	u16 tx_vid = dsa_tag_8021q_standalone_vid(dp);
+ 	u8 pcp;
+ 
++	/* A frame the bridge forwarded or flooded is marked, and for an
++	 * offloaded hardware domain the bridge transmits only one copy and
++	 * relies on the switch to flood it. Leave that path exactly as it
++	 * was.
++	 */
+ 	if (skb->offload_fwd_mark) {
+-		unsigned int bridge_num = dsa_port_bridge_num_get(dp);
+-		struct net_device *br = dsa_port_bridge_dev_get(dp);
+-
+ 		if (br_vlan_enabled(br))
+ 			return skb;
+ 
+ 		tx_vid = dsa_tag_8021q_bridge_vid(bridge_num);
++	} else if (bridge_num && br && !br_vlan_enabled(br) &&
++		   !is_link_local_ether_addr(eth_hdr(skb)->h_dest)) {
++		/* An unmarked frame bypassed bridge forwarding and was
++		 * transmitted straight onto the user port -- the netfilter
++		 * flowtable's direct transmit path does exactly this. Joining
++		 * a bridge replaced the port's standalone VLAN with the
++		 * bridge's, so tagging with the standalone VID would hand the
++		 * switch a VID it does not have and the frame would be
++		 * dropped. Use the bridge VID and let the switch pick the
++		 * egress port from its own FDB.
++		 *
++		 * Link-local traffic (STP, LLDP, EAPOL, PTP peer-delay) is
++		 * excluded: it is addressed to one specific link and keeps the
++		 * precise targeting the standalone VID gives it, the way
++		 * tag_sja1105.c carves link-local frames out of its own
++		 * imprecise path. The driver keeps that VLAN present in
++		 * hardware while the port is bridged.
++		 */
++		tx_vid = dsa_tag_8021q_bridge_vid(bridge_num);
+ 	}
+ 
+ 	pcp = netdev_txq_to_tc(netdev, queue_mapping);

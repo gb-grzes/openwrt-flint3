@@ -4,12 +4,26 @@ Mainline **OpenWrt** support for the **GL.iNet Flint 3 (GL-BE9300)** — Qualcom
 **IPQ5332** (quad Cortex-A53) with tri-band Wi-Fi 7, a Realtek **RTL8372N** 10G
 switch and a **RTL8221B** 2.5G WAN PHY.
 
-> **This branch (`flint3-be9300`) is a complete, buildable OpenWrt tree.**
-> Clone it and build — there is nothing to drop into another checkout.
+> **Integration branch: `integrate-perceival-20260930`, kernel 6.18.52.**
+> This merges perceival's changes through `5e05500f27` while preserving this
+> fork's LED fix, 802.11k/CAKE fixes and MLO/802.11r guard. It has not been
+> firmware-built or tested on a router. See the [integration notes](docs/integration-perceival-20260930.md)
+> before building or flashing; upstream measurements below are not validation
+> of this combined branch.
+>
+> This is a complete OpenWrt source tree, not an overlay.
 > (An earlier `main` branch held a target *overlay*; it is retired and
 > preserved at the tag `archive/main-overlay`.)
 
 Target: **`qualcommbe/ipq53xx`**, kernel **6.18**.
+
+> [!WARNING]
+> **Unofficial, community-maintained port — not affiliated with, endorsed by, or supported
+> by GL.iNet or the OpenWrt project.** Provided **as-is, with no warranty of any kind**.
+> Flashing third-party firmware carries real risk, including bricking the device, and may
+> void your hardware warranty. **Back up your eMMC first** — the ART partition holds your
+> unit's unique radio calibration data and MAC addresses and cannot be recovered from
+> anywhere else. If this router matters to you, test on a spare unit before relying on it.
 
 ## Hardware
 
@@ -30,9 +44,10 @@ Target: **`qualcommbe/ipq53xx`**, kernel **6.18**.
 | LAN (RTL8372N via DSA + EDMA/PPE) | working |
 | WAN (2.5G, USXGMII) | working, links at 2.5 Gbps |
 | VLANs (bridge-vlan on DSA) | working |
+| PPE hardware flow offload | IPv4 LAN→WAN NAT (TCP/UDP, untagged or 802.1Q WAN) ~2.3 Gbit/s at ~1% CPU; opt-in via the firewall's hardware flow offloading. WAN→LAN and IPv6 in the next release |
 | Wi-Fi 7, all three bands | working |
 | MLO (AP MLD across 2.4/5/6 GHz) | working |
-| DFS | working (needs the cfg80211 secondary-AP-after-CAC patch, included) |
+| DFS | working with one BSS per DFS radio; multi-BSS startup can loop the CAC (see Known issues) |
 | 802.11k / 802.11v | working |
 | eMMC sysupgrade + return to stock | working |
 
@@ -41,17 +56,33 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
 ## Known issues
 
 - **ath12k firmware hang under sustained load.** After hours with many clients
-  the Q6 can take a fatal error; radios stay down until reboot. Reported
-  upstream.
+  the Q6 can take a fatal error. Since 2026-09-28 the firmware coredump is
+  released automatically and the radios recover in seconds instead of staying
+  down; the cause of the crash itself is still open. Reported upstream.
+- **DFS CAC restarts forever when several BSSes start together on the 5 GHz
+  radio** (issue #84): the secondary-BSS check in our cfg80211 patch uses the
+  beacon interval as a proxy for "CAC covered" and races the primary at
+  startup. Workarounds: a non-DFS channel, or start the radio with one BSS and
+  add the others with `wifi reload`. Fix in progress.
+- **Kernel panic in netlink socket release**, seen six times since August on
+  both APs after hours of uptime (sockets of a bridge notification, hostapd
+  or wsdd2). The AP reboots itself in ~90 s. wsdd2 is kept disabled as one
+  trigger; root cause under investigation with a KASAN kernel.
+- **Client kicks for "excessive missing ACKs"**: the driver's packet-loss
+  events are unreliable for multi-link stations, so hostapd's
+  `disassoc_low_ack` now defaults to 0 in these images (set it to 1 on a
+  wifi-iface to restore the old behaviour).
 - **PPE WAN RX FIFO overruns.** Roughly 0.07–0.09 % of packets at ~1.9 Gbit/s.
   No longer the hard ~600 Mbit/s cap earlier builds had, but not zero.
-- **802.11r is incompatible with MLO.** hostapd's FT code has no MLD
-  awareness — do not enable 11r on an MLD SSID. 11k/11v are fine.
+- **802.11r with MLO remains disabled in this fork.** Experimental FT-over-MLO
+  patches are included, but are not validated here. The local Wi-Fi setup guard
+  still disables 11r on MLO SSIDs; do not remove it merely to try this update.
+  11k/11v are unaffected.
 
 ## Building
 
 ```sh
-git clone -b flint3-be9300 https://github.com/perceival/openwrt-flint3.git
+git clone -b integrate-perceival-20260930 https://github.com/gb-grzes/openwrt-flint3.git
 cd openwrt-flint3
 ./scripts/feeds update -a
 ./scripts/feeds install -a
@@ -62,6 +93,21 @@ make -j"$(nproc)"
 ```
 
 Images land in `bin/targets/qualcommbe/ipq53xx/`.
+
+### Don't want to build from source?
+
+No pre-built image of this integration branch has been produced here.
+Upstream reference images are published periodically on the
+**[Releases page](https://github.com/perceival/openwrt-flint3/releases)**, in three flavours:
+
+- **`vanilla`** — the exact, unmodified default this tree produces with zero customization
+  (no LuCI, `wpad-basic-mbedtls`) — what you'd get building it yourself with no changes
+- **`ap`** — full config (LuCI, tri-band MLO) plus the FT-over-MLO roaming series; what the
+  maintainer's own household runs
+- **`router`** — gateway role: LuCI, WireGuard, unbound, chrony, mDNS reflection; nftables
+  flowtable offload in software by default, PPE hardware offload opt-in (see Status)
+
+See the disclaimer above before flashing any of them.
 
 ## Installing
 
@@ -75,8 +121,48 @@ Short version: from stock firmware, use the **factory** image with
 required and the "missing section" warnings for `u-boot`/`tz`/`sb11` are
 expected. Do **not** force the plain sysupgrade image from stock.
 
+Stock QSDK firmware may report `qcom,ipq5332-ap-mi01.6` as its board name.
+That is the generic Qualcomm MI01.6/RDP468 identity used by the vendor path,
+not the OpenWrt GL-BE9300 device identifier. The same compatible is used by
+the upstream Qualcomm RDP468 device tree, so it is intentionally not added to
+this profile's `SUPPORTED_DEVICES`: doing so would advertise the Flint 3 image
+as compatible with other hardware using that generic identity. The resulting
+stock compatibility warning is therefore expected; use the documented `-F`
+factory-image path instead (see [issue #9](https://github.com/perceival/openwrt-flint3/issues/9)).
+
 **Back up your eMMC first** — the ART partition holds this unit's radio
 calibration and MAC addresses and cannot be recovered from anywhere else.
+
+## Other boards
+
+Only the GL-BE9300 is tested here. The tree is a `qualcommbe/ipq53xx` target, and anything that
+is not board-specific — the IPQ5332 clocks, PCIe, PPE/EDMA Ethernet and hardware offload, ath12k
+Wi-Fi and the firmware-recovery handler — is shared by every IPQ53xx device. What a new board
+needs is a device tree, an image definition and, if its switch is not a Realtek RTL837x, a
+matching switch driver.
+
+**Defined in this tree, untested by me** (images are not published for them):
+
+| Board | SoC | Switch | Flash | Origin | Notes |
+|---|---|---|---|---|---|
+| GL.iNet GL-BE6500 | IPQ5332 + QCN9274 | RTL837x (same driver) | NAND (UBI) | [JiaY-shi](https://github.com/JiaY-shi/openwrt) | closest relative; builds from this tree |
+| Ubiquiti UniFi 7 Pro XGS | IPQ5332 | none (single 10G PHY) | eMMC + SPI-NOR | Til Kaiser, upstream [#25185](https://github.com/openwrt/openwrt/pull/25185) | needs a bootloader downgrade (newer ones enforce signatures) |
+
+**Other IPQ53xx devices with community work** (not in this tree):
+
+| Device | SoC | Switch | Status |
+|---|---|---|---|
+| Xiaomi BE3600 Pro (RN01) | IPQ5312 | Motorcomm YT9215S | ported on top of the upstream ipq53xx PR (Ethernet, storage, boot reported working) — [#23161](https://github.com/openwrt/openwrt/pull/23161) |
+
+**Upstream:** OpenWrt main has no IPQ53xx support yet. The subtarget is proposed in
+[openwrt/openwrt#23161](https://github.com/openwrt/openwrt/pull/23161) (open). The RTL8372N
+switch driver used here exists only in this tree.
+
+**Testers wanted.** If you own a GL-BE6500, a UniFi 7 Pro XGS or another IPQ53xx device and are
+comfortable with a serial console and an eMMC/NAND backup, I would like to hear from you: open an
+issue with the model, a boot log from stock and a photo of the board. Board support that nobody
+can test stays unpublished, and a second set of hands is the fastest way to change that. PRs
+bringing up another board on top of this branch are welcome too.
 
 ## Upstream
 

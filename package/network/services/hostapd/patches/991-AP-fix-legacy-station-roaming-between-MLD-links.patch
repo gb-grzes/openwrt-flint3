@@ -175,9 +175,9 @@ Signed-off-by: Ramasamy Kaliappan <rkaliapp@qti.qualcomm.com>
  
 --- a/src/ap/sta_info.h
 +++ b/src/ap/sta_info.h
-@@ -349,6 +349,7 @@ struct sta_info {
- 	u8 mld_assoc_link_id;
- 	struct link_reconf_req_list *reconf_req;
+@@ -355,6 +355,7 @@ struct sta_info {
+ 	 */
+ 	u8 auth_link_addr[ETH_ALEN];
  #endif /* CONFIG_IEEE80211BE */
 +	u8 skip_kernel_delete;
  
