@@ -4,12 +4,13 @@ Mainline **OpenWrt** support for the **GL.iNet Flint 3 (GL-BE9300)** — Qualcom
 **IPQ5332** (quad Cortex-A53) with tri-band Wi-Fi 7, a Realtek **RTL8372N** 10G
 switch and a **RTL8221B** 2.5G WAN PHY.
 
-> **Integration branch: `integrate-perceival-20260930`, kernel 6.18.52.**
-> This merges perceival's changes through `5e05500f27` while preserving this
-> fork's LED fix, 802.11k/CAKE fixes and MLO/802.11r guard. It has not been
-> firmware-built or tested on a router. See the [integration notes](docs/integration-perceival-20260930.md)
-> before building or flashing; upstream measurements below are not validation
-> of this combined branch.
+> **Integration branch: `integrate-perceival-20261003`, kernel 6.18.52.**
+> This merges perceival's changes through `2365932733` on top of the previous
+> integration, preserving this fork's LED fix, 802.11k/CAKE fixes and MLO/802.11r
+> guard. The new changes have not been firmware-built or tested on a router.
+> See the [integration notes](docs/integration-perceival-20261003.md) before
+> building or flashing; upstream measurements below are not validation of
+> this combined branch.
 >
 > This is a complete OpenWrt source tree, not an overlay.
 > (An earlier `main` branch held a target *overlay*; it is retired and
@@ -47,7 +48,7 @@ Target: **`qualcommbe/ipq53xx`**, kernel **6.18**.
 | PPE hardware flow offload | IPv4 LAN→WAN NAT (TCP/UDP, untagged or 802.1Q WAN) ~2.3 Gbit/s at ~1% CPU; opt-in via the firewall's hardware flow offloading. WAN→LAN and IPv6 in the next release |
 | Wi-Fi 7, all three bands | working |
 | MLO (AP MLD across 2.4/5/6 GHz) | working |
-| DFS | working with one BSS per DFS radio; multi-BSS startup can loop the CAC (see Known issues) |
+| DFS | multi-BSS startup reported working by perceival; not retested on this integration |
 | 802.11k / 802.11v | working |
 | eMMC sysupgrade + return to stock | working |
 
@@ -59,11 +60,6 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
   the Q6 can take a fatal error. Since 2026-09-28 the firmware coredump is
   released automatically and the radios recover in seconds instead of staying
   down; the cause of the crash itself is still open. Reported upstream.
-- **DFS CAC restarts forever when several BSSes start together on the 5 GHz
-  radio** (issue #84): the secondary-BSS check in our cfg80211 patch uses the
-  beacon interval as a proxy for "CAC covered" and races the primary at
-  startup. Workarounds: a non-DFS channel, or start the radio with one BSS and
-  add the others with `wifi reload`. Fix in progress.
 - **Kernel panic in netlink socket release**, seen six times since August on
   both APs after hours of uptime (sockets of a bridge notification, hostapd
   or wsdd2). The AP reboots itself in ~90 s. wsdd2 is kept disabled as one
@@ -82,7 +78,7 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
 ## Building
 
 ```sh
-git clone -b integrate-perceival-20260930 https://github.com/gb-grzes/openwrt-flint3.git
+git clone -b integrate-perceival-20261003 https://github.com/gb-grzes/openwrt-flint3.git
 cd openwrt-flint3
 ./scripts/feeds update -a
 ./scripts/feeds install -a
