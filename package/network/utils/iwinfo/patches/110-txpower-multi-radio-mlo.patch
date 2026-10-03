@@ -1,0 +1,304 @@
+Subject: [PATCH] nl80211: report TX power for the selected radio and MLO links
+
+Match regulatory limits by frequency, request split wiphy dumps and retain
+results across fragments. Never turn an unknown limit into 255 dBm. Read
+per-link power attributes on MLD interfaces. Resolve UCI radio queries by
+the configured band and radio mask instead of the first netdev on a shared
+wiphy. Report unavailable or conflicting values as unknown.
+
+Related split-dump work: https://github.com/openwrt/iwinfo/pull/41
+
+---
+--- a/iwinfo_nl80211.c
++++ b/iwinfo_nl80211.c
+@@ -1634,28 +1634,139 @@
+ 	return -1;
+ }
+ 
+-static int nl80211_get_txpower_cb(struct nl_msg *msg, void *arg)
++struct nl80211_power_data {
++	int band;
++	int radio_idx;
++	int frequency;
++	int dbm;
++	bool seen;
++};
++
++static void nl80211_power_sample(struct nl80211_power_data *data,
++                                struct nlattr **tb)
+ {
+-	int *buf = arg;
+-	struct nlattr **tb = nl80211_parse(msg);
++	int frequency = 0, dbm = INT_MIN;
++
++	if (tb[NL80211_ATTR_WIPHY_FREQ])
++		frequency = nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]);
++
++	if (data->band && nl80211_freq2band(frequency) != data->band)
++		return;
+ 
+ 	if (tb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL])
+-		*buf = iwinfo_mbm2dbm(nla_get_u32(tb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]));
++		dbm = iwinfo_mbm2dbm((int32_t)nla_get_u32(tb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]));
++
++	/* A single iwinfo value must not silently represent different MLO links. */
++	if (!data->seen)
++	{
++		data->frequency = frequency;
++		data->dbm = dbm;
++		data->seen = true;
++	}
++	else
++	{
++		if (data->frequency != frequency)
++			data->frequency = 0;
++		if (data->dbm != dbm)
++			data->dbm = INT_MIN;
++	}
++}
++
++static int nl80211_get_power_data_cb(struct nl_msg *msg, void *arg)
++{
++	struct nl80211_power_data *data = arg;
++	struct nlattr **tb = nl80211_parse(msg);
++	struct nlattr *link, *links[NL80211_ATTR_MAX + 1];
++	uint32_t mask;
++	int rem;
++
++	if (data->radio_idx >= 0)
++	{
++		if (!tb[NL80211_ATTR_VIF_RADIO_MASK])
++			return NL_SKIP;
++		mask = nla_get_u32(tb[NL80211_ATTR_VIF_RADIO_MASK]);
++		if (!(mask & (1U << data->radio_idx)))
++			return NL_SKIP;
++		/* Without a band, a multi-radio MLD cannot be disambiguated. */
++		if (!data->band && mask != (1U << data->radio_idx))
++			return NL_SKIP;
++	}
++
++	if (!tb[NL80211_ATTR_MLO_LINKS])
++		nl80211_power_sample(data, tb);
++	else
++		nla_for_each_nested(link, tb[NL80211_ATTR_MLO_LINKS], rem)
++		{
++			if (!nla_parse_nested(links, NL80211_ATTR_MAX, link, NULL))
++				nl80211_power_sample(data, links);
++		}
+ 
+ 	return NL_SKIP;
+ }
+ 
+-static int nl80211_get_txpower(const char *ifname, int *buf)
++static int nl80211_get_power_data(const char *ifname,
++                                 struct nl80211_power_data *data)
+ {
+-	char *res;
++	struct uci_section *s;
++	const char *opt;
++	char *res = NULL, *end;
++	long idx;
++	int flags = 0;
++
++	memset(data, 0, sizeof(*data));
++	data->radio_idx = -1;
++	data->dbm = INT_MIN;
+ 
+-	res = nl80211_phy2ifname(ifname);
+-	*buf = 0;
++	s = iwinfo_uci_get_radio(ifname, "mac80211");
++	if (s)
++	{
++		opt = uci_lookup_option_string(uci_ctx, s, "band");
++		if (opt)
++		{
++			if (!strcmp(opt, "2g"))
++				data->band = IWINFO_BAND_24;
++			else if (!strcmp(opt, "5g"))
++				data->band = IWINFO_BAND_5;
++			else if (!strcmp(opt, "6g"))
++				data->band = IWINFO_BAND_6;
++			else if (!strcmp(opt, "60g"))
++				data->band = IWINFO_BAND_60;
++		}
++		opt = uci_lookup_option_string(uci_ctx, s, "radio");
++		if (opt)
++		{
++			idx = strtol(opt, &end, 10);
++			if (end == opt || *end || idx < 0 || idx >= 32)
++			{
++				iwinfo_uci_free();
++				return -1;
++			}
++			data->radio_idx = idx;
++		}
++	}
++	iwinfo_uci_free();
+ 
+-	if (nl80211_request(res ? res : ifname, NL80211_CMD_GET_INTERFACE, 0,
+-	                    nl80211_get_txpower_cb, buf))
++	/* A UCI radio on a shared wiphy must not resolve to the first netdev. */
++	if (data->band || data->radio_idx >= 0)
++		flags = NLM_F_DUMP;
++	else
++		res = nl80211_phy2ifname(ifname);
++
++	if (nl80211_request(res ? res : ifname, NL80211_CMD_GET_INTERFACE, flags,
++	                    nl80211_get_power_data_cb, data))
+ 		return -1;
+ 
++	return data->seen ? 0 : -1;
++}
++
++static int nl80211_get_txpower(const char *ifname, int *buf)
++{
++	struct nl80211_power_data data;
++
++	if (nl80211_get_power_data(ifname, &data) || data.dbm == INT_MIN)
++		return -1;
++
++	*buf = data.dbm;
+ 	return 0;
+ }
+ 
+@@ -2554,10 +2665,15 @@
+ 	return -1;
+ }
+ 
++struct nl80211_txpwr_data {
++	int frequency;
++	int dbm_max;
++};
++
+ static int nl80211_get_txpwrlist_cb(struct nl_msg *msg, void *arg)
+ {
+-	int *dbm_max = arg;
+-	int ch_cur, ch_cmp, bands_remain, freqs_remain;
++	struct nl80211_txpwr_data *data = arg;
++	int bands_remain, freqs_remain, dbm;
+ 
+ 	struct nlattr **attr = nl80211_parse(msg);
+ 	struct nlattr *bands[NL80211_BAND_ATTR_MAX + 1];
+@@ -2567,35 +2683,35 @@
+ 	static const struct nla_policy freq_policy[NL80211_FREQUENCY_ATTR_MAX + 1] = {
+ 		[NL80211_FREQUENCY_ATTR_FREQ]         = { .type = NLA_U32  },
+ 		[NL80211_FREQUENCY_ATTR_DISABLED]     = { .type = NLA_FLAG },
+-		[NL80211_FREQUENCY_ATTR_PASSIVE_SCAN] = { .type = NLA_FLAG },
+-		[NL80211_FREQUENCY_ATTR_NO_IBSS]      = { .type = NLA_FLAG },
+-		[NL80211_FREQUENCY_ATTR_RADAR]        = { .type = NLA_FLAG },
+ 		[NL80211_FREQUENCY_ATTR_MAX_TX_POWER] = { .type = NLA_U32  },
+ 	};
+ 
+-	ch_cur = *dbm_max; /* value int* is initialized with channel by caller */
+-	*dbm_max = -1;
++	/* Split dumps also contain messages without bands or frequencies. */
++	if (!attr[NL80211_ATTR_WIPHY_BANDS])
++		return NL_SKIP;
+ 
+ 	nla_for_each_nested(band, attr[NL80211_ATTR_WIPHY_BANDS], bands_remain)
+ 	{
+ 		nla_parse(bands, NL80211_BAND_ATTR_MAX, nla_data(band),
+ 		          nla_len(band), NULL);
+ 
++		if (!bands[NL80211_BAND_ATTR_FREQS])
++			continue;
++
+ 		nla_for_each_nested(freq, bands[NL80211_BAND_ATTR_FREQS], freqs_remain)
+ 		{
+ 			nla_parse(freqs, NL80211_FREQUENCY_ATTR_MAX,
+ 			          nla_data(freq), nla_len(freq), freq_policy);
+ 
+-			ch_cmp = nl80211_freq2channel(nla_get_u32(
+-				freqs[NL80211_FREQUENCY_ATTR_FREQ]));
+-
+-			if ((!ch_cur || (ch_cmp == ch_cur)) &&
++			if (freqs[NL80211_FREQUENCY_ATTR_FREQ] &&
++			    (int)nla_get_u32(freqs[NL80211_FREQUENCY_ATTR_FREQ]) == data->frequency &&
++			    !freqs[NL80211_FREQUENCY_ATTR_DISABLED] &&
+ 			    freqs[NL80211_FREQUENCY_ATTR_MAX_TX_POWER])
+ 			{
+-				*dbm_max = (int)(0.01 * nla_get_u32(
+-					freqs[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]));
+-
+-				break;
++				dbm = (int32_t)nla_get_u32(freqs[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]);
++				dbm = dbm < 0 ? -1 : iwinfo_mbm2dbm(dbm);
++				if (dbm < data->dbm_max)
++					data->dbm_max = dbm;
+ 			}
+ 		}
+ 	}
+@@ -2605,41 +2721,45 @@
+ 
+ static int nl80211_get_txpwrlist(const char *ifname, char *buf, int *len)
+ {
+-	int err, ch_cur;
+-	int dbm_max = -1, dbm_cur, dbm_cnt;
+-	struct iwinfo_txpwrlist_entry entry;
+-
+-	if (nl80211_get_channel(ifname, &ch_cur))
+-		ch_cur = 0;
+-
+-	/* initialize the value pointer with channel for callback */
+-	dbm_max = ch_cur;
+-
+-	err = nl80211_request(ifname, NL80211_CMD_GET_WIPHY, 0,
+-	                      nl80211_get_txpwrlist_cb, &dbm_max);
++	struct nl80211_msg_conveyor *cv;
++	struct nl80211_power_data power;
++	struct nl80211_txpwr_data data = { .dbm_max = INT_MAX };
++	struct iwinfo_txpwrlist_entry entry = {};
++	uint32_t features;
++	int flags, dbm;
+ 
+-	if (!err)
+-	{
+-		for (dbm_cur = 0, dbm_cnt = 0;
+-		     dbm_cur < dbm_max;
+-		     dbm_cur++, dbm_cnt++)
+-		{
+-			entry.dbm = dbm_cur;
+-			entry.mw  = iwinfo_dbm2mw(dbm_cur);
++	*len = 0;
++	if (nl80211_get_power_data(ifname, &power) || power.frequency <= 0)
++		return -1;
++	data.frequency = power.frequency;
+ 
+-			memcpy(&buf[dbm_cnt * sizeof(entry)], &entry, sizeof(entry));
+-		}
++	features = nl80211_get_protocol_features(ifname);
++	flags = features & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP ? NLM_F_DUMP : 0;
++	cv = nl80211_msg(ifname, NL80211_CMD_GET_WIPHY, flags);
++	if (!cv)
++		return -1;
+ 
+-		entry.dbm = dbm_max;
+-		entry.mw  = iwinfo_dbm2mw(dbm_max);
++	NLA_PUT_FLAG(cv->msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
++	if (nl80211_send(cv, nl80211_get_txpwrlist_cb, &data))
++		return -1;
+ 
+-		memcpy(&buf[dbm_cnt * sizeof(entry)], &entry, sizeof(entry));
+-		dbm_cnt++;
++	/* Preserve the uint8_t dBm / uint16_t mW ABI without wrapping either. */
++	if (data.dbm_max < 0 || data.dbm_max > 48 ||
++	    (data.dbm_max + 1) * sizeof(entry) > IWINFO_BUFSIZE)
++		return -1;
+ 
+-		*len = dbm_cnt * sizeof(entry);
+-		return 0;
++	for (dbm = 0; dbm <= data.dbm_max; dbm++)
++	{
++		entry.dbm = dbm;
++		entry.mw = iwinfo_dbm2mw(dbm);
++		memcpy(buf + *len, &entry, sizeof(entry));
++		*len += sizeof(entry);
+ 	}
+ 
++	return 0;
++
++nla_put_failure:
++	nl80211_free(cv);
+ 	return -1;
+ }
+ 
