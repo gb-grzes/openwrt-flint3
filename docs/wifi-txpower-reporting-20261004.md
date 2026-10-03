@@ -132,6 +132,7 @@ should appear. The current power should agree with the driver reading, or be
 unknown where a single truthful value is unavailable. The maximum in the
 option list is a channel limit, not necessarily the currently used power.
 
-This is driver-reported power, not an RF measurement. Hardware verification
-remains pending; this task does not install anything on the router or push
-the new branch to GitHub.
+This is driver-reported power, not an RF measurement. On 2026-10-04, the user
+confirmed that the display issue was resolved on the router after installing
+the new firmware. Publishing this branch to GitHub does not change the running
+router.
