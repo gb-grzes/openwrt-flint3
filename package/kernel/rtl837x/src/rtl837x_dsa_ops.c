@@ -2272,7 +2272,8 @@ static void rtl837x_port_fast_age(struct dsa_switch *ds, int port)
 			ret);
 }
 
-static int rtl837x_fdb_vid(u16 vid, struct dsa_db db, u16 *fdb_vid)
+static int rtl837x_fdb_vid(struct rtk_gsw *gsw, u16 vid,
+			 struct dsa_db db, u16 *fdb_vid)
 {
 	if (vid) {
 		*fdb_vid = vid;
@@ -2281,10 +2282,16 @@ static int rtl837x_fdb_vid(u16 vid, struct dsa_db db, u16 *fdb_vid)
 
 	switch (db.type) {
 	case DSA_DB_PORT:
-		*fdb_vid = dsa_tag_8021q_standalone_vid(db.dp);
+		*fdb_vid = gsw->tag_proto == DSA_TAG_PROTO_RTL8_4 ? 1 :
+			   dsa_tag_8021q_standalone_vid(db.dp);
 		return 0;
 	case DSA_DB_BRIDGE:
-		*fdb_vid = dsa_tag_8021q_bridge_vid(db.bridge.num);
+		/* Native rtl8_4 carries port identity in its header, not an
+		 * internal VLAN. Untagged traffic is learned in the seeded
+		 * VLAN 1; use that same key for VLAN-unaware bridge events.
+		 */
+		*fdb_vid = gsw->tag_proto == DSA_TAG_PROTO_RTL8_4 ? 1 :
+			   dsa_tag_8021q_bridge_vid(db.bridge.num);
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -2539,6 +2546,60 @@ static int rtl837x_port_vlan_del(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+/* RTL8372N deliberately floods host-bound unknown unicast to the CPU instead
+ * of installing CPU FDB entries. But an old learned entry on a user port is
+ * not unknown: after a client moves to Wi-Fi it still sends replies back to
+ * that port. Clear just that dynamic key when DSA reports a foreign bridge
+ * address. Keep static entries, other bridges and port-private host addresses
+ * alone, and do not create CPU entries which could pin a returning LAN client.
+ */
+static int rtl837x_cpu_fdb_add(struct rtk_gsw *gsw,
+			     const unsigned char *addr, u16 vid,
+			     struct dsa_db db)
+{
+	rtk_l2_ucastAddr_t l2 = { 0 };
+	rtk_mac_t mac = { 0 };
+	u16 fdb_vid;
+	int ret;
+
+	if (db.type != DSA_DB_BRIDGE)
+		return 0;
+
+	ret = rtl837x_fdb_vid(gsw, vid, db, &fdb_vid);
+	if (ret)
+		return ret;
+
+	memcpy(mac.octet, addr, ETH_ALEN);
+	l2.ivl = fdb_vid ? 1 : 0;
+	l2.vid_fid = fdb_vid;
+
+	/* Serialize the membership check with bridge join/leave. */
+	mutex_lock(&gsw->isolation_lock);
+	ret = rtk_l2_addr_get(&mac, &l2);
+	if (ret == RT_ERR_L2_ENTRY_NOTFOUND) {
+		ret = 0;
+		goto out;
+	}
+	if (ret) {
+		ret = rtl837x_to_errno(ret);
+		goto out;
+	}
+	if (l2.is_static || !rtl837x_user_port(gsw, l2.port) ||
+	    gsw->bridge_dev[l2.port] != db.bridge.dev) {
+		ret = 0;
+		goto out;
+	}
+
+	ret = rtk_l2_addr_del(&mac, &l2);
+	if (ret == RT_ERR_L2_ENTRY_NOTFOUND)
+		ret = 0;
+	else
+		ret = rtl837x_to_errno(ret);
+out:
+	mutex_unlock(&gsw->isolation_lock);
+	return ret;
+}
+
 static int rtl837x_port_fdb_add(struct dsa_switch *ds, int port,
 				const unsigned char *addr, u16 vid,
 				struct dsa_db db)
@@ -2552,11 +2613,10 @@ static int rtl837x_port_fdb_add(struct dsa_switch *ds, int port,
 	if (!rtl837x_valid_port(gsw, port))
 		return -EINVAL;
 
-	/* Host-bound unknown unicast is already flooded to the CPU port. */
 	if (gsw->chip_id == CHIP_RTL8372N && port == gsw->cpu_port)
-		return 0;
+		return rtl837x_cpu_fdb_add(gsw, addr, vid, db);
 
-	ret = rtl837x_fdb_vid(vid, db, &fdb_vid);
+	ret = rtl837x_fdb_vid(gsw, vid, db, &fdb_vid);
 	if (ret)
 		return ret;
 
@@ -2585,10 +2645,13 @@ static int rtl837x_port_fdb_del(struct dsa_switch *ds, int port,
 	if (!rtl837x_valid_port(gsw, port))
 		return -EINVAL;
 
+	/* The CPU add path only clears stale entries, so there is no CPU
+	 * entry to delete. A returning LAN client may already be learned.
+	 */
 	if (gsw->chip_id == CHIP_RTL8372N && port == gsw->cpu_port)
 		return 0;
 
-	ret = rtl837x_fdb_vid(vid, db, &fdb_vid);
+	ret = rtl837x_fdb_vid(gsw, vid, db, &fdb_vid);
 	if (ret)
 		return ret;
 
@@ -2703,6 +2766,10 @@ int rtl837x_dsa_register(struct rtk_gsw *gsw)
 	ds->phys_mii_mask = rtl837x_user_ports(gsw);
 	ds->configure_vlan_while_not_filtering = true;
 	ds->untag_bridge_pvid = true;
+	/* Report MAC moves to foreign bridge ports (e.g. Wi-Fi) to the CPU
+	 * FDB callback so that stale RTL8372N user-port entries are removed.
+	 */
+	ds->assisted_learning_on_cpu_port = gsw->chip_id == CHIP_RTL8372N;
 	ds->fdb_isolation = true;
 	ds->max_num_bridges = DSA_TAG_8021Q_MAX_NUM_BRIDGES;
 	ds->ageing_time_min = 14000;
