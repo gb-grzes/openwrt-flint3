@@ -1,0 +1,27 @@
+From: Wentao Liang <vulab@iscas.ac.cn>
+Date: Thu, 17 Sep 2026 12:04:43 +0000
+Subject: [PATCH] wifi: ath12k: release rproc resources after IRQ setup failure
+
+Backport the rproc IRQ error unwind to the current AHB loader. Release
+the registered notifier and rproc reference if IRQ configuration fails,
+using the existing cleanup labels. The successful initialization path
+and the firmware loading/recovery contract are unchanged.
+
+Signed-off-by: Wentao Liang <vulab@iscas.ac.cn>
+Link: https://lore.kernel.org/all/20260917120443.2150370-1-vulab@iscas.ac.cn/
+---
+--- a/drivers/net/wireless/ath/ath12k/ahb.c
++++ b/drivers/net/wireless/ath/ath12k/ahb.c
+@@ -1101,7 +1101,11 @@
+ 		}
+ 	}
+ 
+-	return ath12k_ahb_config_rproc_irq(ab);
++	ret = ath12k_ahb_config_rproc_irq(ab);
++	if (ret < 0)
++		goto err_unreg_notifier;
++
++	return 0;
+ 
+ err_unreg_notifier:
+ 	ath12k_ahb_unregister_rproc_notifier(ab);
