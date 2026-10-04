@@ -1,0 +1,30 @@
+Subject: [PATCH] AP MLD: report the link address and driver error on failure
+
+The generic setup error alone cannot distinguish duplicate link addresses,
+a busy driver or an unsupported configuration. Keep the driver return
+value and log it at error level for both initial and dynamically added
+BSSes, without enabling verbose logging or changing link setup policy.
+
+--- a/src/ap/ap_drv_ops.h
++++ b/src/ap/ap_drv_ops.h
+@@ -480,10 +480,19 @@ static inline int hostapd_drv_link_add(struct hostapd_data *hapd,
+ 				       u8 link_id, const u8 *addr)
+ {
++	int ret;
++
+ 	if (!hapd->driver || !hapd->drv_priv || !hapd->driver->link_add)
+ 		return -1;
+ 
+-	return hapd->driver->link_add(hapd->drv_priv, link_id, addr, hapd);
++	ret = hapd->driver->link_add(hapd->drv_priv, link_id, addr, hapd);
++	if (ret)
++		wpa_printf(MSG_ERROR,
++			   "MLD: link_add failed: ifname=%s link_id=%u addr="
++			   MACSTR " ret=%d (%s)",
++			   hapd->conf->iface, link_id, MAC2STR(addr), ret,
++			   strerror(ret < 0 ? -ret : ret));
++	return ret;
+ 
+ }
+ 
+ static inline int hostapd_drv_link_sta_remove(struct hostapd_data *hapd,

@@ -493,8 +493,16 @@ deinit_ctrl:
 	if (interfaces->ctrl_iface_deinit)
 		interfaces->ctrl_iface_deinit(hapd);
 free_hapd:
+	hostapd_bss_link_deinit(hapd);
 	hostapd_free_hapd_data(hapd);
+	hostapd_ucode_free_bss(hapd);
+	hostapd_ubus_free_bss(hapd);
+#ifdef CONFIG_IEEE80211BE
+	if (hapd->mld)
+		hapd->mld->refcount--;
+#endif
 	os_free(hapd);
+	hostapd_cleanup_unused_mlds(iface->interfaces);
 out:
 	hostapd_config_free(conf);
 	return ret;

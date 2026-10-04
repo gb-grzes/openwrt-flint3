@@ -1,0 +1,47 @@
+Subject: [PATCH] AP MLD: use list membership for failed link cleanup
+
+hostapd_setup_bss() sets started before adding the link to the driver.
+If link_add fails while another link exists, the old started/first-BSS
+checks reach dl_list_del() with a zeroed link node and crash hostapd.
+Conversely, a link registered during driver_init() still needs unlinking
+after its driver private data has been cleared.
+
+Use actual list membership instead of the BSS setup state, and make
+hostapd_mld_remove_link() safe for a never-added or already-removed link.
+
+--- a/src/ap/hostapd.c
++++ b/src/ap/hostapd.c
+@@ -728,21 +728,8 @@ void hostapd_bss_link_deinit(struct hostapd_data *hapd)
+ 	}
+ 
+ 	/* Put all freeing logic above this */
+-	if (!hapd->mld || !hapd->mld->num_links)
+-		return;
+-
+-	/* If not started, not yet linked to the MLD. However, the first
+-	 * BSS is always linked since it is linked during driver_init(), and
+-	 * hence, need to remove it from the AP MLD.
+-	 */
+-	if (!hapd->started && hapd->iface->bss[0] != hapd)
+-		return;
+-
+-	/* The first BSS can also be only linked when at least driver_init() is
+-	 * executed. But if previous interface fails, it is not, and hence,
+-	 * safe to skip.
+-	 */
+-	if (hapd->iface->bss[0] == hapd && !hapd->drv_priv)
++	/* started is set before link_add, so it is not proof of membership. */
++	if (!hapd->mld || !hapd->link.next)
+ 		return;
+ 
+ 	hostapd_mld_remove_link(hapd);
+@@ -5387,6 +5374,9 @@ int hostapd_mld_remove_link(struct hostapd_data *hapd)
+ 	if (!mld)
+ 		return -1;
+ 
++	if (!hapd->link.next)
++		return 0;
++
+ 	dl_list_del(&hapd->link);
+ 	mld->num_links--;
+ 
