@@ -4,13 +4,17 @@ Mainline **OpenWrt** support for the **GL.iNet Flint 3 (GL-BE9300)** — Qualcom
 **IPQ5332** (quad Cortex-A53) with tri-band Wi-Fi 7, a Realtek **RTL8372N** 10G
 switch and a **RTL8221B** 2.5G WAN PHY.
 
-> **Integration branch: `integrate-perceival-20261003`, kernel 6.18.52.**
-> This merges perceival's changes through `2365932733` on top of the previous
-> integration, preserving this fork's LED fix, 802.11k/CAKE fixes and MLO/802.11r
-> guard. The new changes have not been firmware-built or tested on a router.
-> See the [integration notes](docs/integration-perceival-20261003.md) before
-> building or flashing; upstream measurements below are not validation of
-> this combined branch.
+> **Kernel update branch: `update-kernel-6.18.55-20261004`, kernel 6.18.55.**
+> Based on the tested `fix-ath12k-legacy-mlo-20261004` branch, preserving the
+> ath12k TX/non-MLO-client fixes, RTL837x roaming/FDB fix, Wi-Fi power reporting,
+> LED behavior, 802.11k/CAKE fixes and MLO/802.11r guard. The user completed a
+> full image build and installed it on Flint 3. Boot, Ethernet initialization,
+> three radio interfaces and two clients completing authentication on MLO are
+> confirmed by the supplied logs. MLO startup retries remain; end-to-end
+> connectivity and long-duration load testing are not yet documented for this
+> kernel. See the [kernel update and validation notes](docs/kernel-6.18.55-flint3-20261004.md)
+> and [ath12k change summary](docs/flint3-ath12k-changelog-20261004.md).
+> The upstream performance figures below are not measurements of this branch.
 >
 > This is a complete OpenWrt source tree, not an overlay.
 > (An earlier `main` branch held a target *overlay*; it is retired and
@@ -56,6 +60,12 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
 
 ## Known issues
 
+- **MLO startup retries.** The supplied 6.18.55 boot logs show repeated
+  `Failed to add link 1 in MLD ap-mld0` messages and interface recreation before
+  all APs come up around 60 seconds after boot. Two clients later authenticate
+  successfully; no further radio restarts appear in the supplied follow-up.
+  Similar retries were present with 6.18.52. Their exact cause is not established,
+  and this kernel update does not claim to fix them.
 - **ath12k firmware hang under sustained load.** After hours with many clients
   the Q6 can take a fatal error. Since 2026-09-28 the firmware coredump is
   released automatically and the radios recover in seconds instead of staying
@@ -78,7 +88,7 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
 ## Building
 
 ```sh
-git clone -b integrate-perceival-20261003 https://github.com/gb-grzes/openwrt-flint3.git
+git clone -b update-kernel-6.18.55-20261004 https://github.com/gb-grzes/openwrt-flint3.git
 cd openwrt-flint3
 ./scripts/feeds update -a
 ./scripts/feeds install -a
@@ -92,7 +102,8 @@ Images land in `bin/targets/qualcommbe/ipq53xx/`.
 
 ### Don't want to build from source?
 
-No pre-built image of this integration branch has been produced here.
+A full image of this branch was built locally and installed by the user;
+no pre-built binary of this branch is published with this source update.
 Upstream reference images are published periodically on the
 **[Releases page](https://github.com/perceival/openwrt-flint3/releases)**, in three flavours:
 

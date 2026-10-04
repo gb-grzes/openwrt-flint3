@@ -89,9 +89,49 @@ przepełnień FIFO PPE.
   QCOM_MDT_LOADER oraz pustych opcjonalnych pakietów crypto-kpp/fs-netfs.
   Nie zmieniano tych ustawień w ramach aktualizacji. Kompilacja nie jest
   wolna od ostrzeżeń, ale zakończyła się bez błędów kompilacji i linkowania.
-- Nie wykonano pełnej kompilacji obrazu ani testu kernela 6.18.55 na routerze.
-  Dotychczasowe obrazy `.bin` w `bin/targets/qualcommbe/ipq53xx` są obrazami
-  poprzedniej wersji — przed wgrywaniem trzeba wykonać pełne `make` poniżej.
+- Użytkownik potwierdził pełną kompilację obrazu bez błędów. Sprawdzono
+  sumy plików względem `sha256sums`, manifest pakietów, `profiles.json`
+  oraz metadane osadzone w sysupgrade: GL-BE9300, qualcommbe/ipq53xx,
+  kernel 6.18.55, rewizja źródeł `299edbf297`.
+
+## Uruchomienie na routerze
+
+Użytkownik wgrał sysupgrade i dostarczył log kernela oraz późniejsze
+`iw dev` i filtrowane `logread`. Sprawdzony obraz:
+`openwrt-qualcommbe-ipq53xx-glinet_gl-be9300-squashfs-sysupgrade.bin`.
+SHA-256:
+`d16fa977202287c71b4aa4eb42b23673c2eeb41224aeb2e1c3aa5325dc485a77`.
+Zmiany dokumentacyjne wykonane po tej kompilacji nie zmieniają kodu firmware.
+
+- Log potwierdza Linux 6.18.55 na GL.iNet GL-BE9300 oraz poprawne
+  zamontowanie SquashFS i zapisywalnego overlay F2FS.
+- PPE/EDMA i RTL837x zostały zainicjalizowane. Połączenie wewnętrzne
+  SoC–switch osiągnęło 10 Gb/s, a fizyczny LAN2 2,5 Gb/s. Nie jest to pomiar
+  przepustowości ani potwierdzenie działania ścieżki WAN.
+- Firmware Wi-Fi pozostał bez zmian: IPQ5332 1.6-01270 i QCN9274 1.6-01243.
+  W dostarczonym fragmencie nie ma panic/oops, błędu ładowania modułów
+  ani awarii firmware Q6.
+- `iw dev` pokazuje trzy AP: 2,4 GHz, kanał 7, 20 MHz, 16 dBm;
+  5 GHz, kanał 36, 80 MHz, 22 dBm; 6 GHz, kanał 21, 320 MHz, 22 dBm.
+  Przejście 2,4 GHz na 20 MHz jest jawnie opisane przez hostapd jako skutek
+  wykrytych sąsiednich BSS, a nie nieudanego startu radia.
+- `ap-mld0` ma link 1 na 5 GHz i link 2 na 6 GHz. Aspire oraz drugi klient
+  zakończyły uwierzytelnianie SAE i uzgadnianie kluczy, co potwierdzają
+  `AP-STA-CONNECTED` i `EAPOL-4WAY-HS-COMPLETED` o 16:15:56 i 16:18:11.
+  Same te wpisy nie potwierdzają DHCP ani dostępu do Internetu.
+
+**Pozostałe ograniczenia:** przy starcie hostapd kilkukrotnie zgłasza
+`MLD: Failed to add link 1 in MLD ap-mld0`, po czym interfejsy Wi-Fi są
+odtwarzane. Końcowe uruchomienie wszystkich AP następuje około 60. sekundy;
+w późniejszym, dostarczonym fragmencie nie ma dalszych restartów. Podobne
+ponawianie startu występowało już na 6.18.52. Dokładnej przyczyny nie ustalono;
+nie przypisujemy jej automatycznie nowemu kernelowi i nie uznajemy jej za
+naprawioną. Ostrzeżenia o nakładaniu pamięci WCSS, początkowym resecie MMC,
+zapasowej GPT i STP portów 0–2 również były obecne w poprzednim logu.
+
+To potwierdzenie startu i podstawowej inicjalizacji, nie test stabilności
+wielogodzinnej ani pełnej łączności klientów. W dostarczonych wynikach dla
+6.18.55 nie ma jeszcze testów ping/DHCP, roamingu ani obciążenia.
 
 Logi znajdują się w `/home/grzesiek/Documents/Codex/` pod nazwami
 `kernel-6.18.55-prepare-20261004.log` i
@@ -119,7 +159,8 @@ git switch update-kernel-6.18.55-20261004
 make -j"$(nproc)" V=s
 ```
 
-Nie wykonywano aktualizacji routera ani publikacji tej gałęzi na GitHubie.
-Po wgraniu należy sprawdzić log startu i wersję kernela, Ethernet, wszystkie
-pasma Wi-Fi, Aspire na OpenWrt-MLO, telefon, DHCP, roaming i stabilność pod
-obciążeniem. Udana kompilacja nie potwierdza jeszcze działania na routerze.
+Obraz został już wgrany przez użytkownika; wyniki startu opisano powyżej.
+Dalsze sprawdzenie powinno obejmować dostęp do routera i Internetu z Aspire
+oraz telefonu, DHCP, wszystkie pasma Wi-Fi, ruch przez Ethernet/WAN, roaming
+i stabilność pod obciążeniem. Publikacja źródeł nie obejmuje plików `.bin`,
+surowych logów routera ani prywatnej konfiguracji.
