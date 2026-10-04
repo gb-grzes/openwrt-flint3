@@ -8,7 +8,8 @@ Branch: `integrate-ath12k-upstream-20261004`, based on tested commit
 Two of the three requested changes are implemented. Shared RO/MultiPD loading
 is deferred after the firmware compatibility review below. Kernel 6.18.52,
 backports 7.2, firmware, DTS and user configuration are unchanged. The mac80211
-package release increases from 2 to 3.
+package release initially increased from 2 to 3. The legacy-client correction
+below increases it to 4 on the same branch.
 
 The existing LED, 802.11k/CAKE, RTL837x Wi-Fi roaming/FDB and iwinfo TX-power
 reporting fixes remain. MLO startup diagnostics are deliberately out of scope;
@@ -36,8 +37,9 @@ link/radio/datapath and crash-flush state before accessing ring memory.
 
 This is an experimental backport of the published patch series, not a claim
 of upstream acceptance or a proven fix for every Q6 firmware hang. The author
-reports testing on WCN7850, not Flint 3/QCN9274. The precheck uses the default
-or association link; per-frame link selection, ring retries and multicast
+reports testing on WCN7850, not Flint 3/QCN9274. The corrected precheck uses
+the vif default, legacy peer default or MLO association link as described below;
+per-frame link selection, ring retries and multicast
 replication still follow the existing driver. It does not reserve capacity
 across all MLO links. Real-device load and recovery testing remain necessary.
 
@@ -91,7 +93,72 @@ of its memory/PAS contract, redistribution notice preservation, and controlled
 2.4 GHz boot/recovery tests with a known-good image available. Availability in
 the checked public sources is not evidence that no such vendor bundle exists.
 
-## Verification completed locally
+## Follow-up: legacy clients on an MLD AP
+
+After the user flashed the initial integration (`b443c0db11`), the supplied
+router log showed repeated associations of legacy client `60:57:18:1a:f6:67`
+on `ap-mld0` without a completed WPA handshake. The same client completed
+handshakes on the ordinary 5 GHz interface. This exposed a regression in the
+new TX queue callback; the initial host tests did not model `sta->mlo` and
+therefore missed this case.
+
+In the prepared driver, `ath12k_mac_op_sta_state()` clears the station object
+and initializes `assoc_link_id` only when `sta->mlo` is true. For a non-MLO
+client on an MLD AP, its actual link is stored in `ahsta->deflink.link_id`;
+the existing `ath12k_mac_get_tx_link()` already uses this field. Selecting the
+zero-initialized association link in the new callback can leave all frames
+queued when the AP uses only links 1 and 2. The callback now distinguishes
+the peer type before looking up the radio:
+
+| Queue | Precheck link |
+| --- | --- |
+| MLD AP, MLO peer | `ahsta->assoc_link_id` (unchanged) |
+| MLD AP, non-MLO peer | `ahsta->deflink.link_id` (corrected) |
+| No peer, or non-MLD vif | `ahvif->deflink.link_id` (unchanged) |
+
+The corrected legacy choice is the peer's link, not a fallback to the AP's
+default link. The bounds, missing-object, crash-flush and ring-capacity guards
+remain. No kernel, firmware, hostapd configuration or router settings change.
+
+Verification of the follow-up:
+
+- The expanded tests were first run against the old prepared callback. All
+  original 16 groups passed, then the legacy 5 GHz case failed because no
+  frame was dequeued (test exit 134). This demonstrates that the new case
+  detects the regression instead of merely passing the corrected code.
+- All 235 patches apply to a fresh, hash-verified backports 7.2 archive with
+  zero context fuzz. The seven touched driver files match the normal prepared
+  tree byte for byte.
+- All 22 ath12k groups pass with AddressSanitizer and UndefinedBehaviorSanitizer
+  against both trees. New groups cover legacy links 1 and 2 differing from the
+  AP default, invalid/missing legacy links, full-ring/later-wake behavior,
+  preserved MLO association-link selection and non-MLD station traffic.
+  The test stubs now model `sta->mlo` and the peer deflink, and record the
+  selected vif link. Leak detection is disabled because the sandbox's tracing
+  prevents LeakSanitizer from running; ASan/UBSan instrumentation stays enabled.
+- The existing 13 RTL837x FDB and 16 iwinfo TX-power groups pass again.
+- `make package/kernel/mac80211/compile -j4 V=s` exits 0. The generated
+  `ath12k_wifi7.ko` is AArch64, has kernel vermagic 6.18.52 and contains the
+  corrected queue-wake callback. Its ring free-space symbol is provided by
+  the rebuilt `ath12k.ko`. This verifies the package, not a full image or a
+  hardware handshake.
+- The remaining build warnings concern jobserver integration,
+  MODULE_DESCRIPTION, QCOM_MDT_LOADER dependencies and empty optional
+  crypto-kpp/fs-netfs packages; no compilation/link failure occurred.
+  `.config` retains SHA-256
+  `a0f5d31055c39c930129f53eba0579f69094ecfdfb58c5466220d9716ea4f999`.
+
+Local follow-up logs are under `/home/grzesiek/Documents/Codex/`, with the
+prefix `ath12k-legacy-link-` and date `20261004`: `test-before`, `test-after`,
+`test-prepared`, `fdb-test`, `txpower-test`, `prepare` and `compile`.
+
+Real-device verification remains necessary: connect Aspire to `OpenWrt-MLO`
+on 5 GHz, confirm WPA completion, an IPv4 lease, router access and Internet,
+then retest ordinary SSIDs, the phone and roaming. This correction does not
+claim to resolve the existing MLO startup retries, duplicate-station hash
+errors (`-17`/`EEXIST`), firmware hangs or all TX scheduling limitations.
+
+## Initial verification, before the hardware regression was reported
 
 - All 235 mac80211 patches applied to a fresh, hash-verified backports 7.2
   archive with `patch --fuzz=0`. Existing patches may have line offsets; no
@@ -124,7 +191,7 @@ Reproduce host tests after preparing the package:
 ```sh
 cd /home/grzesiek/openwrt-flint3
 make package/kernel/mac80211/prepare V=s
-bash package/kernel/mac80211/tests/test-ath12k-upstream.sh
+ASAN_OPTIONS=detect_leaks=0 bash package/kernel/mac80211/tests/test-ath12k-upstream.sh
 ```
 
 If proceeding to a full image test, build this branch with the existing

@@ -14,7 +14,6 @@ typedef struct { unsigned held; } spinlock_t;
 #define unlikely(x) (x)
 #define ATH12K_FLAG_CRASH_FLUSH 0
 #define RPROC_RUNNING 1
-#define rcu_dereference(p) (p)
 #define ath12k_err(...) ((void)0)
 #define lockdep_assert_held(p) assert((p)->held)
 
@@ -47,8 +46,9 @@ struct ath12k { struct ath12k_base *ab; };
 struct ath12k_link_vif { struct ath12k *ar; u8 link_id; };
 struct ath12k_vif { struct ath12k_link_vif deflink, *link[18]; };
 struct ieee80211_vif { bool mld; struct ath12k_vif *priv; };
-struct ath12k_sta { u8 assoc_link_id; };
-struct ieee80211_sta { struct ath12k_sta *priv; };
+struct ath12k_link_sta { u8 link_id; };
+struct ath12k_sta { u8 assoc_link_id; struct ath12k_link_sta deflink; };
+struct ieee80211_sta { bool mlo; struct ath12k_sta *priv; };
 struct ieee80211_txq {
 	struct ieee80211_vif *vif;
 	struct ieee80211_sta *sta;
@@ -68,7 +68,16 @@ static struct {
 	struct dp_tx_ring *tx_ring;
 	struct hal_srng *tcl_ring;
 	struct ieee80211_sta *expected_sta;
+	struct ath12k_link_vif *selected_arvif;
 } test_state;
+
+static struct ath12k_link_vif *test_rcu_dereference(struct ath12k_link_vif *link)
+{
+	assert(test_state.rcu_depth);
+	test_state.selected_arvif = link;
+	return link;
+}
+#define rcu_dereference(p) test_rcu_dereference(p)
 
 static struct ath12k_ahb *ath12k_ab_to_ahb(struct ath12k_base *ab) { return ab->ahb; }
 static int ath12k_ahb_get_rproc(struct ath12k_base *ab)

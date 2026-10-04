@@ -6,8 +6,12 @@ Backport v7 4/4 to backports 7.2. Serialize queue wake operations per
 TX ring and synchronize the hardware consumer pointer before dequeue.
 Keep queued frames in mac80211 while the selected hardware ring is full.
 
-The backport retains the existing deflink/association-link choice and
-all existing frame transmission logic. Reject an out-of-range link ID,
+For a legacy peer on an MLD AP, use the peer's deflink, as the existing
+frame TX path does. assoc_link_id is initialized only for MLO peers;
+using its zero-initialized value for legacy peers can starve their queues
+when the AP has no link 0. Keep association-link selection for MLO peers
+and the vif default for non-station/non-MLD queues. All existing frame
+transmission logic is unchanged. Reject an out-of-range link ID,
 missing datapath or crash-flush state before looking up ring memory;
 these are defensive adaptations for the current multi-device/recovery
 code. No change is made to AP startup, channels, TX power or firmware.
@@ -48,7 +52,7 @@ Link: https://lore.kernel.org/all/20260917064825.12747-5-jtornosm@redhat.com/
  				    struct hal_srng *srng)
 --- a/drivers/net/wireless/ath/ath12k/wifi7/hw.c
 +++ b/drivers/net/wireless/ath/ath12k/wifi7/hw.c
-@@ -1168,9 +1168,83 @@
+@@ -1168,9 +1168,87 @@
  	}
  }
  
@@ -74,7 +78,11 @@ Link: https://lore.kernel.org/all/20260917064825.12747-5-jtornosm@redhat.com/
 +
 +	if (ieee80211_vif_is_mld(vif) && txq->sta) {
 +		ahsta = ath12k_sta_to_ahsta(txq->sta);
-+		link_id = ahsta->assoc_link_id;
++		/* assoc_link_id is only initialized for an MLO peer. */
++		if (txq->sta->mlo)
++			link_id = ahsta->assoc_link_id;
++		else
++			link_id = ahsta->deflink.link_id;
 +	} else {
 +		link_id = ahvif->deflink.link_id;
 +	}

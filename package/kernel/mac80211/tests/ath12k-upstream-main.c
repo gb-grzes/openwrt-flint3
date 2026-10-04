@@ -6,6 +6,7 @@ static struct {
 	struct ath12k_base ab;
 	struct ath12k ar;
 	struct ath12k_vif ahvif;
+	struct ath12k_link_vif links[3];
 	struct ieee80211_vif vif;
 	struct ath12k_sta ahsta;
 	struct ieee80211_sta sta;
@@ -39,6 +40,8 @@ static void reset_fixture(void)
 	fixture.ar.ab = &fixture.ab;
 	fixture.ahvif.deflink = (struct ath12k_link_vif){ .ar = &fixture.ar };
 	fixture.ahvif.link[0] = &fixture.ahvif.deflink;
+	for (unsigned i = 0; i < ARRAY_SIZE(fixture.links); i++)
+		fixture.links[i] = (struct ath12k_link_vif){ .ar = &fixture.ar, .link_id = i };
 	fixture.vif.priv = &fixture.ahvif;
 	fixture.sta.priv = &fixture.ahsta;
 	fixture.txq.vif = &fixture.vif;
@@ -72,8 +75,23 @@ static void wake_queue(void)
 }
 static void passed(const char *name) { groups++; printf("ok %u - %s\n", groups, name); }
 
+static void reset_legacy_mld_peer(u8 peer_link, u8 default_link)
+{
+	reset_fixture();
+	fixture.vif.mld = true;
+	fixture.txq.sta = &fixture.sta;
+	fixture.ahsta.deflink.link_id = peer_link;
+	/* Legacy peers keep assoc_link_id zero even when using link 1 or 2. */
+	fixture.ahvif.deflink.link_id = default_link;
+	fixture.ahvif.link[0] = NULL;
+	fixture.ahvif.link[1] = &fixture.links[1];
+	fixture.ahvif.link[2] = &fixture.links[2];
+	test_state.expected_sta = &fixture.sta;
+}
+
 int main(void)
 {
+	setvbuf(stdout, NULL, _IONBF, 0);
 	reset_fixture(); test_state.get_ret = -ENODEV;
 	assert(ath12k_ahb_configure_rproc(&fixture.ab) == -ENODEV);
 	assert(!test_state.puts && !test_state.unregisters && !test_state.irq_calls);
@@ -125,6 +143,7 @@ int main(void)
 	wake_queue(); assert(test_state.sent == 15 && !test_state.queued);
 	passed("ring wrap arithmetic retains the reserved empty slot");
 	reset_fixture(); fixture.vif.mld = true; fixture.txq.sta = &fixture.sta;
+	fixture.sta.mlo = true;
 	fixture.ahsta.assoc_link_id = 1; fixture.ahvif.link[1] = &fixture.ahvif.deflink;
 	fixture.ahvif.link[0] = NULL; test_state.expected_sta = &fixture.sta;
 	set_capacity(3); test_state.queued = 1; wake_queue(); assert(test_state.sent == 1);
@@ -148,6 +167,36 @@ int main(void)
 	reset_fixture(); set_capacity(4); test_state.queued = 3; test_state.crash_on_tx = true;
 	wake_queue(); assert(test_state.sent == 1 && test_state.queued == 2);
 	passed("recovery beginning during draining stops further dequeue");
+	reset_legacy_mld_peer(1, 2); set_capacity(3); test_state.queued = 1;
+	wake_queue(); assert(test_state.sent == 1 && !test_state.queued);
+	assert(test_state.selected_arvif == &fixture.links[1]);
+	passed("legacy 5 GHz peer on MLD uses peer link 1, not zero or AP default 2");
+	reset_legacy_mld_peer(2, 1); set_capacity(3); test_state.queued = 1;
+	wake_queue(); assert(test_state.sent == 1 && !test_state.queued);
+	assert(test_state.selected_arvif == &fixture.links[2]);
+	passed("non-MLO 6 GHz peer on MLD uses peer link 2, not zero or AP default 1");
+	reset_legacy_mld_peer(255, 2); set_capacity(3); test_state.queued = 1;
+	wake_queue(); assert(!test_state.selector_calls && !test_state.dequeues);
+	assert(test_state.queued == 1);
+	reset_legacy_mld_peer(1, 2); fixture.ahvif.link[1] = NULL;
+	set_capacity(3); test_state.queued = 1; wake_queue();
+	assert(!test_state.selector_calls && !test_state.dequeues && test_state.queued == 1);
+	passed("invalid or absent legacy peer link does not fall back to another AP link");
+	reset_legacy_mld_peer(1, 2); set_capacity(0); test_state.queued = 2;
+	wake_queue(); assert(!test_state.sent && !test_state.dequeues && test_state.queued == 2);
+	assert(test_state.selected_arvif == &fixture.links[1]);
+	set_capacity(3); wake_queue(); assert(test_state.sent == 2 && !test_state.queued);
+	passed("legacy MLD queue respects a full ring and resumes on a later wake");
+	reset_legacy_mld_peer(1, 1); fixture.sta.mlo = true; fixture.ahsta.assoc_link_id = 2;
+	set_capacity(3); test_state.queued = 1; wake_queue();
+	assert(test_state.sent == 1 && test_state.selected_arvif == &fixture.links[2]);
+	passed("true MLO peer retains association link 2 despite differing default links");
+	reset_fixture(); fixture.txq.sta = &fixture.sta;
+	fixture.ahsta.deflink.link_id = 2; fixture.ahsta.assoc_link_id = 1;
+	test_state.expected_sta = &fixture.sta;
+	set_capacity(3); test_state.queued = 1; wake_queue();
+	assert(test_state.sent == 1 && test_state.selected_arvif == &fixture.ahvif.deflink);
+	passed("non-MLD AP retains its vif default link for station traffic");
 	printf("PASS: %u ath12k upstream regression groups\n", groups);
 	return 0;
 }
