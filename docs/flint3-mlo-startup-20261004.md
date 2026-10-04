@@ -3,6 +3,17 @@
 Branch: `fix-mlo-startup-20261004`, based on `update-app-sources-20261004`
 at `71d059856e526c031acdf8a9d805348b0f10916a`.
 
+## Podsumowanie zmian
+
+Naprawa startu Wi-Fi/MLO na Flint 3: zabezpieczenie sprzątania po nieudanym
+dodaniu łącza, dokładniejszy opis błędu oraz zachowanie osobnych adresów MAC
+dla łączy 5 i 6 GHz. Usunięto konflikt, przez który start 6 GHz przed 5 GHz
+powodował błąd `-114` i wyłączenie całego radia 5 GHz. Hostapd ma wydanie `r5`.
+Kompilacja i po 20 testów regresji dla obu wariantów zakończyły się powodzeniem.
+Po wgraniu użytkownik potwierdził działanie wszystkich pasm oraz dostęp do
+internetu przez zwykłe 5 GHz i MLO. Kernel, firmware, ustawienia Wi-Fi,
+fancontrol i tłumaczenia pozostały bez zmian.
+
 ## First iteration: crash evidence and scope
 
 The supplied boot logs contain six sequences of:
@@ -141,10 +152,41 @@ There are no compiler errors, failed hunks or patch fuzz; line offsets are
 expected when later patches change positions. Only the previously seen
 jobserver/ninja parallelism warnings occur.
 
-The second iteration still requires a new full image and a router boot test.
-The previously built sysupgrade image does not contain this correction.
 No changes to country, transmit power, channel, encryption, router settings,
 kernel, ath12k, firmware, fancontrol or translations are needed.
+
+### Second iteration: full image and router verification
+
+The user built and installed the release-5 image at commit
+`8598114d1af2b32041cf38bd962b1023394f96c2`. Its sysupgrade SHA-256 is
+`04ba887381c4a4ae5c17564827de13b09ce0814266d8f653b2348c1e78998003`.
+The completed full-build log is
+`/home/grzesiek/Documents/Codex/flint3-mlo-address-full-build-20261004.log`.
+Profile metadata identifies this commit and kernel 6.18.55; the manifest
+contains hostapd/common/utils release 5. All eight image-output checksums
+verify, and the hostapd binary in the SquashFS matches the newly packaged
+binary. The full build has jobserver/libtool warnings and future-file-time
+warnings in hwinfo, but no compiler errors or failed build targets.
+
+The supplied router output on 2026-10-04 shows:
+
+```text
+20:22:04 phy0.2-ap0: AP-ENABLED
+20:22:05 phy0.0-ap0: AP-ENABLED
+20:22:06 phy0.1-ap0: AP-ENABLED
+ap-mld0 link ID 1: 96:83:c4:ce:a3:f8, channel 36, 5 GHz, 80 MHz
+ap-mld0 link ID 2: 00:03:7f:12:82:a2, channel 21, 6 GHz, 320 MHz
+```
+
+All three ordinary APs are enabled. Both MLO links are present with different
+link addresses, even with the previously failing 6 GHz-first startup order.
+The supplied filtered log contains no MLD link-add error or signal-11 exit.
+The user then confirms that everything works, including router/internet
+access on ordinary 5 GHz and the MLO SSID.
+
+This verifies the startup correction on the router. It is not a multi-day
+firmware stability test or a measurement of simultaneous multi-link traffic.
+The description-only follow-up commit does not require another firmware build.
 
 ## Build and router check
 
