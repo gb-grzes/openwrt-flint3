@@ -141,26 +141,3 @@ Logi znajdują się w `/home/grzesiek/Documents/Codex/` pod nazwami
 `kernel-6.18.55-fdb-host-test-20261004.log` i
 `kernel-6.18.55-txpower-host-test-20261004.log`.
 
-## Kopia działającego obrazu i dalszy test
-
-Przed przebudową zachowano obrazy sysupgrade/factory, manifest, sumy oraz
-konfiguracje OpenWrt i kernela 6.18.52 w:
-`/home/grzesiek/Documents/Codex/flint3-known-good-6.18.52-20261004.8dXZp8/`.
-SHA-256 zachowanego sysupgrade:
-`ae16688288b3a10f30d3a9df8f8e8d8ab007785942e6b02bd77c9c4537a7856e`.
-
-Obraz do instalacji musi zawierać kernel 6.18.55 i wszystkie moduły
-przebudowane dla niego. Nie instalować samych nowych modułów na działającym
-kernelu 6.18.52. Pełna kompilacja obrazu:
-
-```sh
-cd /home/grzesiek/openwrt-flint3
-git switch update-kernel-6.18.55-20261004
-make -j"$(nproc)" V=s
-```
-
-Obraz został już wgrany przez użytkownika; wyniki startu opisano powyżej.
-Dalsze sprawdzenie powinno obejmować dostęp do routera i Internetu z Aspire
-oraz telefonu, DHCP, wszystkie pasma Wi-Fi, ruch przez Ethernet/WAN, roaming
-i stabilność pod obciążeniem. Publikacja źródeł nie obejmuje plików `.bin`,
-surowych logów routera ani prywatnej konfiguracji.
