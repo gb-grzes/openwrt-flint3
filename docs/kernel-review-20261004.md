@@ -1,5 +1,10 @@
 # Flint 3: kernel update assessment, 2026-10-04
 
+This is the historical assessment made against kernel 6.18.52, before the
+separate upgrade branch was started. Implementation and verification of the
+later upgrade are tracked in
+[kernel-6.18.55-flint3-20261004.md](kernel-6.18.55-flint3-20261004.md).
+
 ## Version and recommendation
 
 This branch still uses 6.18.52. According to
@@ -18,7 +23,7 @@ Recommendation: keep this ath12k experiment on 6.18.52 for an isolated test,
 then update the kernel in another branch. Use the OpenWrt 6.18.53/54 maintenance
 as the reviewed foundation and assess/refresh the remaining patch stack for
 6.18.55. Staying within 6.18 is preferable to jumping to 7.x for this router.
-No kernel upgrade has been implemented or compiled here.
+No kernel upgrade had been implemented or compiled at the assessment stage.
 
 ## Changes relevant to this build
 
