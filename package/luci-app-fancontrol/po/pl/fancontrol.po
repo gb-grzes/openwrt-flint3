@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: luci-app-fancontrol 2.0.0\n"
-"PO-Revision-Date: 2026-09-02 18:00+0200\n"
+"PO-Revision-Date: 2026-10-04 18:00+0200\n"
 "Last-Translator: Grzesiek\n"
 "Language-Team: Polish\n"
 "Language: pl\n"
@@ -55,8 +55,8 @@ msgstr "Ustawienia"
 msgid "Temperature Curve"
 msgstr "Charakterystyka temperatury"
 
-msgid "Controls the minimum PWM and how fan speed rises with temperature."
-msgstr "Określa minimalne PWM oraz sposób zwiększania prędkości wentylatora wraz ze wzrostem temperatury."
+msgid "Controls when the fan starts and how its speed rises with temperature."
+msgstr "Określa, kiedy wentylator się uruchamia i jak jego prędkość rośnie wraz z temperaturą."
 
 msgid "Hardware"
 msgstr "Sprzęt"
@@ -117,7 +117,6 @@ msgstr "Interwał odczytu"
 
 msgid "How often the temperature is read and the PWM output is updated. Unit: seconds."
 msgstr "Jak często odczytywana jest temperatura i aktualizowane jest wyjście PWM. Jednostka: sekundy."
-msgstr "Źródło temperatury"
 
 msgid "Use \"auto\" to select a CPU or SoC thermal sensor, or enter an absolute thermal zone or hwmon tempN_input path."
 msgstr "Użyj „auto”, aby automatycznie wybrać czujnik temperatury CPU lub SoC, albo podaj bezwzględną ścieżkę thermal zone lub hwmon tempN_input."
@@ -127,8 +126,6 @@ msgstr "Typ strefy termicznej"
 
 msgid "Preferred thermal zone type when temperature input is automatic, for example cpu_top_thermal. Leave as \"auto\" unless several sensors are available."
 msgstr "Preferowany typ strefy termicznej przy automatycznym wyborze źródła temperatury, np. cpu-top-thermal. Pozostaw „auto”, chyba że dostępnych jest kilka czujników."
-
-msgstr "Wyjście PWM"
 
 msgid "Use \"auto\" to select a writable hwmon pwmN output, or enter its absolute path. cooling_device cur_state is not a PWM output."
 msgstr "Użyj „auto”, aby automatycznie wybrać zapisywalne wyjście hwmon pwmN, albo podaj jego bezwzględną ścieżkę. cooling_device cur_state nie jest wyjściem PWM."
