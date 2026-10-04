@@ -2,19 +2,24 @@
 
 ## Scope and result
 
-Branch: `integrate-ath12k-upstream-20261004`, based on tested commit
+Publication branch: `fix-ath12k-legacy-mlo-20261004`.
+Implementation branch: `integrate-ath12k-upstream-20261004`, based on tested commit
 `4bda6a844a3c2e0738e30710d2afc8826174684a`.
+
+Polish release summary:
+[flint3-ath12k-changelog-20261004.md](flint3-ath12k-changelog-20261004.md).
 
 Two of the three requested changes are implemented. Shared RO/MultiPD loading
 is deferred after the firmware compatibility review below. Kernel 6.18.52,
 backports 7.2, firmware, DTS and user configuration are unchanged. The mac80211
 package release initially increased from 2 to 3. The legacy-client correction
-below increases it to 4 on the same branch.
+below increases it to 4. Both changes are included in the publication branch.
 
 The existing LED, 802.11k/CAKE, RTL837x Wi-Fi roaming/FDB and iwinfo TX-power
 reporting fixes remain. MLO startup diagnostics are deliberately out of scope;
 this branch does not claim to fix the hostapd `Failed to add link` messages.
-No router changes, firmware flashing or GitHub push were performed.
+The implementation was initially local. The user subsequently built and
+flashed the corrected image; the router verification is recorded below.
 
 ## Implemented changes
 
@@ -152,11 +157,26 @@ Local follow-up logs are under `/home/grzesiek/Documents/Codex/`, with the
 prefix `ath12k-legacy-link-` and date `20261004`: `test-before`, `test-after`,
 `test-prepared`, `fdb-test`, `txpower-test`, `prepare` and `compile`.
 
-Real-device verification remains necessary: connect Aspire to `OpenWrt-MLO`
-on 5 GHz, confirm WPA completion, an IPv4 lease, router access and Internet,
-then retest ordinary SSIDs, the phone and roaming. This correction does not
-claim to resolve the existing MLO startup retries, duplicate-station hash
-errors (`-17`/`EEXIST`), firmware hangs or all TX scheduling limitations.
+### Router verification reported by the user on 2026-10-04
+
+The user built and flashed the corrected code at `05e29416c8`. The supplied
+Aspire output confirms connection `OpenWrt-MLO` with IPv4 address
+`192.168.2.122/24`, gateway and configured DNS `192.168.2.1`. Three pings to
+the Flint router (`192.168.2.5`) and three to `1.1.1.1`, explicitly bound to
+`wlp2s0`, all succeeded with zero packet loss. Average RTTs were 2.234 ms and
+12.767 ms respectively. This verifies basic IPv4 router and Internet
+connectivity for the reported legacy-client case; it is not a fresh-DHCP
+capture, DNS-resolution test or throughput measurement.
+
+After the suggested additional network-switching and phone checks, the user
+reported that everything works. Those checks have a user confirmation but no
+separate packet capture or detailed results in this record.
+
+The observed legacy-client connectivity regression no longer occurs in the
+reported test. Sustained multi-client load and recovery testing remain
+necessary. This correction does not claim to resolve the existing MLO startup
+retries, duplicate-station hash errors (`-17`/`EEXIST`), firmware hangs or all
+TX scheduling limitations.
 
 ## Initial verification, before the hardware regression was reported
 
