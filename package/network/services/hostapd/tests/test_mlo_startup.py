@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Run native tests using MLD cleanup functions from the prepared hostapd source.
+"""Run native MLD cleanup/address tests from the prepared hostapd source.
 
 These tests do not run a radio or alter the router. They exercise the actual
-list operations with small BSS/driver stubs, including a failed second link.
+list operations and first-link address selection with small BSS/driver stubs,
+including a failed second link and either 5/6 GHz startup order.
 """
 
 import argparse
@@ -14,7 +15,8 @@ import tempfile
 
 
 def function(source, name):
-    match = re.search(r"^[\w *\n]+\b" + re.escape(name) + r"\([^;]*?\)\s*\{",
+    match = re.search(r"^[A-Za-z_][\w *\n]*\b" + re.escape(name) +
+                      r"\([^;{}]*?\)\s*\{",
                       source, re.M)
     if not match:
         raise ValueError(f"Function not found: {name}")
@@ -46,9 +48,10 @@ PRELUDE = r'''
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define os_free free
 #define os_memset memset
+#define os_memcpy memcpy
 typedef uint8_t u8;
 struct hostapd_data;
-struct hostapd_bss_config { int mld_ap; char iface[32]; void *vlan; };
+struct hostapd_bss_config { int mld_ap; char iface[32]; void *vlan; u8 bssid[6]; };
 struct hostapd_iface { struct hostapd_data *bss[2]; void *interfaces; };
 struct hostapd_mld {
     struct dl_list links;
@@ -56,6 +59,7 @@ struct hostapd_mld {
     struct hostapd_data *fbss;
     char name[32];
     unsigned int refcount;
+    u8 mld_addr[6];
 };
 struct driver_ops { int (*link_add)(void *, u8, const u8 *, void *); };
 struct hostapd_data {
@@ -68,10 +72,17 @@ struct hostapd_data {
     const struct driver_ops *driver;
     int started;
     unsigned int mld_link_id;
+    u8 own_addr[6];
 };
 static char diagnostic[256];
 static int driver_result;
 static int driver_calls;
+/* Deterministic stub for the fallback, not a randomness-quality test. */
+static void random_mac_addr_keep_oui(u8 *addr) __attribute__((unused));
+static void random_mac_addr_keep_oui(u8 *addr) {
+    addr[5] ^= 0x5a;
+    addr[0] &= 0xfe;
+}
 static void wpa_printf(int level, const char *format, ...) {
     va_list ap;
     if (level != MSG_ERROR) return;
@@ -233,6 +244,50 @@ int main(int argc, char **argv) {
         check_count(1);
         assert(mld.fbss == &bss[0] && mld.refcount == 1);
         assert(freed_ucode == 1 && freed_ubus == 1 && cleaned_mlds == 1);
+    } else if (!strcmp(test, "first-mld-link-configured-bssid")) {
+        const u8 netdev[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf8};
+        const u8 link[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xfa};
+        memcpy(cfg[1].bssid, link, 6);
+        memcpy(bss[1].own_addr, link, 6);
+        first_link_address(&bss[1], NULL, netdev);
+        assert(!memcmp(mld.mld_addr, netdev, 6));
+        assert(!memcmp(bss[1].own_addr, link, 6));
+    } else if (!strcmp(test, "first-mld-link-fallback-address")) {
+        const u8 netdev[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf8};
+        first_link_address(&bss[1], NULL, netdev);
+        assert(!memcmp(mld.mld_addr, netdev, 6));
+        assert(memcmp(bss[1].own_addr, netdev, 6));
+        assert(!memcmp(bss[1].own_addr, netdev, 3));
+        assert(!(bss[1].own_addr[0] & 1));
+    } else if (!strcmp(test, "6ghz-first-no-duplicate-with-5ghz") ||
+               !strcmp(test, "5ghz-first-no-duplicate-with-6ghz")) {
+        const u8 netdev[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf8};
+        const u8 link5[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf8};
+        const u8 link6[6] = {0x00, 0x03, 0x7f, 0x12, 0xc3, 0xe3};
+        unsigned int first = !strcmp(test, "6ghz-first-no-duplicate-with-5ghz") ? 2 : 1;
+        unsigned int other = 3 - first;
+        memcpy(cfg[1].bssid, link5, 6);
+        memcpy(cfg[2].bssid, link6, 6);
+        memcpy(bss[1].own_addr, link5, 6);
+        memcpy(bss[2].own_addr, link6, 6);
+        first_link_address(&bss[first], NULL, netdev);
+        /* Later links use their configured BSSID and the shared driver. */
+        memcpy(bss[other].own_addr, cfg[other].bssid, 6);
+        assert(memcmp(bss[first].own_addr, bss[other].own_addr, 6));
+        assert(!memcmp(bss[first].own_addr, cfg[first].bssid, 6));
+        assert(!memcmp(mld.mld_addr, netdev, 6));
+    } else if (!strcmp(test, "plain-bss-interface-address")) {
+        const u8 netdev[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf6};
+        cfg[1].mld_ap = 0;
+        first_link_address(&bss[1], NULL, netdev);
+        assert(!memcmp(bss[1].own_addr, netdev, 6));
+    } else if (!strcmp(test, "plain-bss-explicit-address")) {
+        const u8 link[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf6};
+        const u8 netdev[6] = {0x96, 0x83, 0xc4, 0xce, 0xa3, 0xf7};
+        cfg[1].mld_ap = 0;
+        memcpy(bss[1].own_addr, link, 6);
+        first_link_address(&bss[1], link, netdev);
+        assert(!memcmp(bss[1].own_addr, link, 6));
     } else {
         return 2;
     }
@@ -247,6 +302,9 @@ TESTS = [
     "first-link-promotion", "deinit-twice", "plain-bss", "missing-mld-context",
     "driver-error-diagnostic", "driver-success-quiet", "missing-driver",
     "dynamic-failure-after-link-add", "dynamic-failure-before-link-add",
+    "first-mld-link-configured-bssid", "first-mld-link-fallback-address",
+    "6ghz-first-no-duplicate-with-5ghz", "5ghz-first-no-duplicate-with-6ghz",
+    "plain-bss-interface-address", "plain-bss-explicit-address",
 ]
 
 
@@ -262,6 +320,19 @@ def main():
         "hostapd_mld_move_vlan_list", "hostapd_mld_add_link",
         "hostapd_mld_remove_link", "hostapd_bss_link_deinit")]
     funcs.append(function(driver_source, "hostapd_drv_link_add"))
+    common_source = (args.source_dir / "src/utils/common.h").read_text()
+    funcs.append(function(common_source, "is_zero_ether_addr")
+                 .replace("static inline", "static inline __attribute__((unused))"))
+    setup = function(source, "hostapd_setup_bss")
+    marker = "\t\tif (!addr)\n\t\t\tos_memcpy(hapd->own_addr, if_addr, ETH_ALEN);"
+    start = setup.index(marker)
+    end_marker = "\n#endif /* CONFIG_IEEE80211BE */"
+    end = setup.index(end_marker, start) + len(end_marker)
+    address_block = setup[start:end]
+    funcs.append("\nstatic void first_link_address(struct hostapd_data *hapd, "
+                 "const u8 *addr, const u8 *if_addr) {\n"
+                 "struct hostapd_bss_config *conf = hapd->conf; (void)conf;\n" +
+                 address_block + "\n}\n")
     ucode_source = (args.source_dir / "src/ap/ucode.c").read_text()
     dynamic_add = function(ucode_source, "uc_hostapd_iface_add_bss")
     cleanup = dynamic_add.split("\nfree_hapd:\n", 1)[1].split("\nout:\n", 1)[0]

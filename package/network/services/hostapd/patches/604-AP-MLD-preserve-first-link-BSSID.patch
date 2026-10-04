@@ -1,0 +1,30 @@
+Subject: [PATCH] AP MLD: preserve the BSSID of the first secondary link
+
+When the first link of an MLD is a secondary BSS, hostapd_setup_bss()
+passes NULL as the address to hostapd_if_add() to reuse the MLD netdev.
+The returned interface address then overwrites the configured link BSSID.
+If 6 GHz starts before 5 GHz, both links can acquire the MLD netdev's
+address and mac80211 rejects the second link with -EALREADY. The failed
+setup also disables the ordinary BSS on that radio.
+
+Save the interface address as the MLD address, but restore the configured
+BSSID for the link. If no BSSID is configured, use the same random-link
+address fallback as hostapd_driver_init(). Later links and non-MLD BSSes
+are unchanged.
+
+--- a/src/ap/hostapd.c
++++ b/src/ap/hostapd.c
+@@ -1586,6 +1586,13 @@ int hostapd_setup_bss(struct hostapd_data *hapd, bool first,
+ 			os_memcpy(hapd->mld->mld_addr, hapd->own_addr,
+ 				  ETH_ALEN);
++
++			/* Keep the link BSSID separate from the shared MLD address. */
++			if (!is_zero_ether_addr(conf->bssid))
++				os_memcpy(hapd->own_addr, conf->bssid,
++					  ETH_ALEN);
++			else
++				random_mac_addr_keep_oui(hapd->own_addr);
+ 		}
+ #endif /* CONFIG_IEEE80211BE */
+ 	}
+ 
