@@ -1,0 +1,832 @@
+diff --git a/applications/luci-app-babeld/Makefile b/applications/luci-app-babeld/Makefile
+deleted file mode 100644
+index b7637211..00000000
+--- a/applications/luci-app-babeld/Makefile
++++ /dev/null
+@@ -1,11 +0,0 @@
+-include $(TOPDIR)/rules.mk
+-
+-LUCI_TITLE:=LuCI support for babeld
+-LUCI_DEPENDS:=+luci-base +babeld
+-
+-PKG_LICENSE:=Apache-2.0
+-PKG_MAINTAINER:=Nick Hainke <vincent@systemli.org>
+-
+-include ../../luci.mk
+-
+-# call BuildPackage - OpenWrt buildroot signature
+diff --git a/applications/luci-app-babeld/htdocs/luci-static/resources/view/babeld/babeld-view.js b/applications/luci-app-babeld/htdocs/luci-static/resources/view/babeld/babeld-view.js
+deleted file mode 100644
+index d763c25c..00000000
+--- a/applications/luci-app-babeld/htdocs/luci-static/resources/view/babeld/babeld-view.js
++++ /dev/null
+@@ -1,255 +0,0 @@
+-'use strict';
+-'require uci';
+-'require view';
+-'require poll';
+-'require ui';
+-'require rpc';
+-
+-function renderTableXRoutes(ubus_data, target_div) {
+-	const data = ubus_data;
+-	for (let protocol in data) {
+-		const target = target_div;
+-
+-		const title = document.createElement('h3');
+-		title.appendChild(document.createTextNode('X-Routes ' + protocol));
+-		target.appendChild(title);
+-
+-		const table = document.createElement('table');
+-		table.setAttribute('class', 'table');
+-		table.setAttribute('id', 'babel_overview_xroutes_' + protocol);
+-
+-		const headerRow = document.createElement('tr');
+-		headerRow.setAttribute('class', 'tr table-titles');
+-		const headerContent = '<th class="th" style="font-weight: 700;">' + '%h'.format(protocol) + ' Prefix</th>\
+-                             <th class="th" style="font-weight: 700;">Metric</th>\
+-                             <th class="th" style="font-weight: 700;">Source-Prefix</th>';
+-
+-		headerRow.innerHTML = headerContent;
+-		table.appendChild(headerRow);
+-
+-
+-		for (let prefix in data[protocol]) {
+-			const prefixRow = document.createElement('tr');
+-			prefixRow.setAttribute('class', 'tr');
+-			const prefixContent = '<td class="td" data-title="xroutes_' + '%h'.format(protocol) + '_prefix">' + '%h'.format(data[protocol][prefix]["address"]) + '</td>\
+-                                 <td class="td" data-title="xroutes_' + '%h'.format(protocol) + '_metric">' + '%d'.format(data[protocol][prefix]["metric"]) + '</td>\
+-                                 <td class="td" data-title="xroutes_' + '%h'.format(protocol) + '_src_prefix">' + '%h'.format(data[protocol][prefix]["src_prefix"]) + '</td>';
+-
+-			prefixRow.innerHTML = prefixContent;
+-			table.appendChild(prefixRow);
+-		}
+-		target.appendChild(table);
+-	}
+-}
+-
+-function renderTableRoutes(ubus_data, target_div) {
+-	const data = ubus_data;
+-	for (let protocol in data) {
+-		const target = target_div;
+-
+-		const title = document.createElement('h3');
+-		title.appendChild(document.createTextNode('Routes ' + protocol));
+-		target.appendChild(title);
+-
+-		const table = document.createElement('table');
+-		table.setAttribute('class', 'table');
+-		table.setAttribute('id', 'babel_overview_routes_' + protocol);
+-
+-		const headerRow = document.createElement('tr');
+-		headerRow.setAttribute('class', 'tr table-titles');
+-		const headerContent = '<th class="th" style="font-weight: 700;">' + '%h'.format(protocol) + ' Prefix</th>\
+-                             <th class="th" style="font-weight: 700;">Source-Prefix</th>\
+-                             <th class="th" style="font-weight: 700;">Route-Metric</th>\
+-                             <th class="th" style="font-weight: 700;">Route Smoothed Metric</th>\
+-                             <th class="th" style="font-weight: 700;">Refmetric</th>\
+-                             <th class="th" style="font-weight: 700;">ID</th>\
+-                             <th class="th" style="font-weight: 700;">Seq. No.</th>\
+-                             <th class="th" style="font-weight: 700;">Age</th>\
+-                             <th class="th" style="font-weight: 700;">Via</th>\
+-                             <th class="th" style="font-weight: 700;">Nexthop</th>\
+-                             <th class="th" style="font-weight: 700;">Installed</th>\
+-                             <th class="th" style="font-weight: 700;">Feasible</th>';
+-
+-		headerRow.innerHTML = headerContent;
+-		table.appendChild(headerRow);
+-
+-		for (let prefix in data[protocol]) {
+-			const prefixRow = document.createElement('tr');
+-			prefixRow.setAttribute('class', 'tr');
+-			const prefixContent = '<td class="td" data-title="routes_' + '%h'.format(protocol) + '_prefix">' + '%h'.format(data[protocol][prefix]["address"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_src_prefix">' + '%h'.format(data[protocol][prefix]["src_prefix"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_metric">' + '%d'.format(data[protocol][prefix]["route_metric"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_rout_smoothed_metric">' + '%d'.format(data[protocol][prefix]["route_smoothed_metric"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_refmetric">' + '%d'.format(data[protocol][prefix]["refmetric"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_id">' + '%h'.format(data[protocol][prefix]["id"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_seqno">' + '%d'.format(data[protocol][prefix]["seqno"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_age">' + '%d'.format(data[protocol][prefix]["age"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_via">' + '%h'.format(data[protocol][prefix]["via"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_nexthop">' + '%h'.format(data[protocol][prefix]["nexthop"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_installed">' + '%b'.format(data[protocol][prefix]["installed"]) + '</td>\
+-                                 <td class="td" data-title="routes_' + '%h'.format(protocol) + '_feasible">' + '%b'.format(data[protocol][prefix]["feasible"]) + '</td>';
+-
+-			prefixRow.innerHTML = prefixContent;
+-			table.appendChild(prefixRow);
+-		}
+-		target.appendChild(table);
+-	}
+-}
+-
+-function renderTableNeighbours(ubus_data, target_div) {
+-	const data = ubus_data;
+-	for (let protocol in data) {
+-		const target = target_div;
+-
+-		const title = document.createElement('h3');
+-		title.appendChild(document.createTextNode('Neighbours ' + protocol));
+-		target.appendChild(title);
+-
+-		const table = document.createElement('table');
+-		table.setAttribute('class', 'table');
+-		table.setAttribute('id', 'babel_overview_neighbours_' + protocol);
+-
+-		const headerRow = document.createElement('tr');
+-		headerRow.setAttribute('class', 'tr table-titles');
+-		const headerContent = '<th class="th" style="font-weight: 700;">' + '%h'.format(protocol) + ' Neighbour</th>\
+-                             <th class="th" style="font-weight: 700;">Device</th>\
+-                             <th class="th" style="font-weight: 700;">Multicast Hellos</th>\
+-                             <th class="th" style="font-weight: 700;">Unicast Hellos</th>\
+-                             <th class="th" style="font-weight: 700;">RX cost</th>\
+-                             <th class="th" style="font-weight: 700;">TX cost</th>\
+-                             <th class="th" style="font-weight: 700;">RTT</th>\
+-                             <th class="th" style="font-weight: 700;">Interface up</th>';
+-
+-		headerRow.innerHTML = headerContent;
+-		table.appendChild(headerRow);
+-
+-		for (let neighbour in data[protocol]) {
+-			const neighbourRow = document.createElement('tr');
+-			neighbourRow.setAttribute('class', 'tr');
+-			const neighbourContent = '<td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_neighbour">' + '%h'.format(data[protocol][neighbour]["address"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_dev">' + '%h'.format(data[protocol][neighbour]["dev"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_hello_reach">' + '%d'.format(data[protocol][neighbour]["hello_reach"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_uhello_reach">' + '%d'.format(data[protocol][neighbour]["uhello_reach"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_rxcost">' + '%d'.format(data[protocol][neighbour]["rxcost"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_txcost">' + '%d'.format(data[protocol][neighbour]["txcost"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_rtt">' + '%d'.format(data[protocol][neighbour]["rtt"]) + '</td>\
+-                                    <td class="td" data-title="neighbours_' + '%h'.format(protocol) + '_if_up">' + '%b'.format(data[protocol][neighbour]["if_up"]) + '</td>';
+-
+-			neighbourRow.innerHTML = neighbourContent;
+-			table.appendChild(neighbourRow);
+-		}
+-		target.appendChild(table);
+-	}
+-}
+-
+-function renderTableInfo(ubus_data, target_div) {
+-	const data = ubus_data;
+-	const target = target_div;
+-
+-	const title = document.createElement('h3');
+-	title.appendChild(document.createTextNode('Info'));
+-	target.appendChild(title);
+-
+-	const table = document.createElement('table');
+-	table.setAttribute('class', 'table');
+-	table.setAttribute('id', 'babel_overview_info');
+-
+-
+-	const headerRow = document.createElement('tr');
+-	headerRow.setAttribute('class', 'tr table-titles');
+-	const headerContent = '<th class="th" style="font-weight: 700;">Babeld Version</th>\
+-                         <th class="th" style="font-weight: 700;">My-ID</th>\
+-                         <th class="th" style="font-weight: 700;">Host</th>';
+-
+-	headerRow.innerHTML = headerContent;
+-	table.appendChild(headerRow);
+-
+-	const neighbourRow = document.createElement('tr');
+-	neighbourRow.setAttribute('class', 'tr');
+-	const neighbourContent = '<td class="td" data-title="info_babeld_version">' + '%h'.format(data["babeld_version"]) + '</td>\
+-                            <td class="td" data-title="info_dev">' + '%h'.format(data["my_id"]) + '</td>\
+-                            <td class="td" data-title="info_host">' + '%h'.format(data["host"]) + '</td>';
+-
+-	neighbourRow.innerHTML = neighbourContent;
+-	table.appendChild(neighbourRow);
+-	target.appendChild(table);
+-}
+-
+-
+-return view.extend({
+-	callGetInfo: rpc.declare({
+-		object: 'babeld',
+-		method: 'get_info'
+-	}),
+-	callGetXroutes: rpc.declare({
+-		object: 'babeld',
+-		method: 'get_xroutes'
+-	}),
+-	callGetRoutes: rpc.declare({
+-		object: 'babeld',
+-		method: 'get_routes'
+-	}),
+-	callGetNeighbours: rpc.declare({
+-		object: 'babeld',
+-		method: 'get_neighbours'
+-	}),
+-
+-	fetch_babeld() {
+-		let data;
+-		let self = this;
+-		return new Promise(function (resolve, reject) {
+-			Promise.all([self.callGetInfo(), self.callGetXroutes(), self.callGetRoutes(), self.callGetNeighbours()])
+-				.then(function (res) {
+-					data = res;
+-					resolve([data]);
+-				})
+-				.catch(function (err) {
+-					console.error(err);
+-					reject([null]);
+-				});
+-		});
+-	},
+-
+-	action_babeld() {
+-		let self = this;
+-		return new Promise(function (resolve, reject) {
+-			self
+-				.fetch_babeld()
+-				.then(function ([data]) {
+-					var info = data[0];
+-					var xroutes = data[1];
+-					var routes = data[2];
+-					var neighbours = data[3];
+-					var result = { info, xroutes, routes, neighbours };
+-					resolve(result);
+-				})
+-				.catch(function (err) {
+-					reject(err);
+-				});
+-		});
+-	},
+-
+-	render() {
+-		return this.action_babeld()
+-			.then(function (result) {
+-
+-				const mainDiv = E('div', {
+-					'id': 'babeld'
+-				}, []);
+-
+-                renderTableInfo(result.info, mainDiv);
+-                renderTableXRoutes(result.xroutes, mainDiv);
+-                renderTableRoutes(result.routes, mainDiv);
+-                renderTableNeighbours(result.neighbours, mainDiv);
+-
+-				const fresult = E([], {}, mainDiv);
+-				return fresult;
+-			})
+-			.catch(function (error) {
+-				console.error(error);
+-			});
+-	},
+-	handleSaveApply: null,
+-	handleSave: null,
+-	handleReset: null,
+-});
+diff --git a/applications/luci-app-babeld/po/az/babeld.po b/applications/luci-app-babeld/po/az/babeld.po
+deleted file mode 100644
+index d505570e..00000000
+--- a/applications/luci-app-babeld/po/az/babeld.po
++++ /dev/null
+@@ -1,16 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Last-Translator: Automatically generated\n"
+-"Language-Team: none\n"
+-"Language: az\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr ""
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr ""
+diff --git a/applications/luci-app-babeld/po/cs/babeld.po b/applications/luci-app-babeld/po/cs/babeld.po
+deleted file mode 100644
+index afb27db9..00000000
+--- a/applications/luci-app-babeld/po/cs/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-03-07 08:02+0000\n"
+-"Last-Translator: Pavel Borecki <pavel.borecki@gmail.com>\n"
+-"Language-Team: Czech <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/cs/>\n"
+-"Language: cs\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.17-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Udělit luci-app-babeld přístup do UCI nastavování"
+diff --git a/applications/luci-app-babeld/po/de/babeld.po b/applications/luci-app-babeld/po/de/babeld.po
+deleted file mode 100644
+index 417702dc..00000000
+--- a/applications/luci-app-babeld/po/de/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-05-02 19:29+0000\n"
+-"Last-Translator: ssantos <ssantos@web.de>\n"
+-"Language-Team: German <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/de/>\n"
+-"Language: de\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.17.1\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Gewähre UCI Zugriff auf luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/es/babeld.po b/applications/luci-app-babeld/po/es/babeld.po
+deleted file mode 100644
+index 98f9fae7..00000000
+--- a/applications/luci-app-babeld/po/es/babeld.po
++++ /dev/null
+@@ -1,22 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: \n"
+-"POT-Creation-Date: \n"
+-"PO-Revision-Date: 2026-06-27 12:02+0000\n"
+-"Last-Translator: apemay <apemay.dev@gmail.com>\n"
+-"Language-Team: Spanish <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/es/>\n"
+-"Language: es\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 2026.7.dev0\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Conceder acceso UCI para luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/ga/babeld.po b/applications/luci-app-babeld/po/ga/babeld.po
+deleted file mode 100644
+index 831564c2..00000000
+--- a/applications/luci-app-babeld/po/ga/babeld.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-04-23 10:15+0000\n"
+-"Last-Translator: Aindriú Mac Giolla Eoin <aindriu80@gmail.com>\n"
+-"Language-Team: Irish <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/ga/>\n"
+-"Language: ga\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=5; plural=n==1 ? 0 : n==2 ? 1 : (n>2 && n<7) ? 2 :(n>"
+-"6 && n<11) ? 3 : 4;\n"
+-"X-Generator: Weblate 5.17.1-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Deonaigh rochtain UCI do luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/ko/babeld.po b/applications/luci-app-babeld/po/ko/babeld.po
+deleted file mode 100644
+index 80d33b07..00000000
+--- a/applications/luci-app-babeld/po/ko/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-02-25 12:32+0000\n"
+-"Last-Translator: Hyeonjeong Lee <h9101654@gmail.com>\n"
+-"Language-Team: Korean <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/ko/>\n"
+-"Language: ko\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=1; plural=0;\n"
+-"X-Generator: Weblate 5.16.1-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "luci-app-babeld의 UCI 접근 권한 부여"
+diff --git a/applications/luci-app-babeld/po/lo/babeld.po b/applications/luci-app-babeld/po/lo/babeld.po
+deleted file mode 100644
+index 1f44ae60..00000000
+--- a/applications/luci-app-babeld/po/lo/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-05-03 08:19+0000\n"
+-"Last-Translator: BoneNI <bounkirdni@gmail.com>\n"
+-"Language-Team: Lao <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/lo/>\n"
+-"Language: lo\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=1; plural=0;\n"
+-"X-Generator: Weblate 5.17.1\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "ອະນຸຍາດການເຂົ້າເຖິງ UCI ສໍາລັບ luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/lt/babeld.po b/applications/luci-app-babeld/po/lt/babeld.po
+deleted file mode 100644
+index 5ecbd90d..00000000
+--- a/applications/luci-app-babeld/po/lt/babeld.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-04-08 22:10+0000\n"
+-"Last-Translator: Džiugas Januševičius <dziugas1959@hotmail.com>\n"
+-"Language-Team: Lithuanian <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/lt/>\n"
+-"Language: lt\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"(n%100<10 || n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.17-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "„Babeld“"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Suteikti „UCI“ prieigą – „luci-app-babeld“"
+diff --git a/applications/luci-app-babeld/po/lv/babeld.po b/applications/luci-app-babeld/po/lv/babeld.po
+deleted file mode 100644
+index 65a7679b..00000000
+--- a/applications/luci-app-babeld/po/lv/babeld.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-04-12 14:48+0000\n"
+-"Last-Translator: \"ℂ𝕠𝕠𝕠𝕝 (𝕘𝕚𝕥𝕙𝕦𝕓.𝕔𝕠𝕞/ℂ𝕠𝕠𝕠𝕝)\" <coool@mail.lv>\n"
+-"Language-Team: Latvian <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/lv/>\n"
+-"Language: lv\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n % 10 == 0 || n % 100 >= 11 && n % 100 <= "
+-"19) ? 0 : ((n % 10 == 1 && n % 100 != 11) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.17-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Piešķirt luci-app-babeld UCI piekļuvi"
+diff --git a/applications/luci-app-babeld/po/pl/babeld.po b/applications/luci-app-babeld/po/pl/babeld.po
+deleted file mode 100644
+index d7178278..00000000
+--- a/applications/luci-app-babeld/po/pl/babeld.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-02-25 15:40+0000\n"
+-"Last-Translator: Matthaiks <kitynska@gmail.com>\n"
+-"Language-Team: Polish <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/pl/>\n"
+-"Language: pl\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
+-"|| n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.16.1-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Przyznaj luci-app-babeld dostęp do UCI"
+diff --git a/applications/luci-app-babeld/po/pt/babeld.po b/applications/luci-app-babeld/po/pt/babeld.po
+deleted file mode 100644
+index f016d0d7..00000000
+--- a/applications/luci-app-babeld/po/pt/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-05-02 19:29+0000\n"
+-"Last-Translator: ssantos <ssantos@web.de>\n"
+-"Language-Team: Portuguese <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/pt/>\n"
+-"Language: pt\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n > 1;\n"
+-"X-Generator: Weblate 5.17.1\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Conceder acesso UCI ao luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/ro/babeld.po b/applications/luci-app-babeld/po/ro/babeld.po
+deleted file mode 100644
+index f4c968a2..00000000
+--- a/applications/luci-app-babeld/po/ro/babeld.po
++++ /dev/null
+@@ -1,17 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Last-Translator: Automatically generated\n"
+-"Language-Team: none\n"
+-"Language: ro\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=n==1 ? 0 : (n==0 || (n%100 > 0 && n%100 < "
+-"20)) ? 1 : 2;\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr ""
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr ""
+diff --git a/applications/luci-app-babeld/po/ru/babeld.po b/applications/luci-app-babeld/po/ru/babeld.po
+deleted file mode 100644
+index fac82585..00000000
+--- a/applications/luci-app-babeld/po/ru/babeld.po
++++ /dev/null
+@@ -1,21 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-04-22 23:36+0000\n"
+-"Last-Translator: SnIPeRSnIPeR <snipersniper@users.noreply.hosted.weblate.org>"
+-"\n"
+-"Language-Team: Russian <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/ru/>\n"
+-"Language: ru\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.17.1-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Предоставить доступ к UCI для luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/sv/babeld.po b/applications/luci-app-babeld/po/sv/babeld.po
+deleted file mode 100644
+index 2d99e550..00000000
+--- a/applications/luci-app-babeld/po/sv/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Language: sv\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Last-Translator: Daniel Nylander <yeagersthlm@gmail.com>\n"
+-"Language-Team: Swedish <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/sv/>\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"PO-Revision-Date: 2026-09-10 20:24+0000\n"
+-"X-Generator: Weblate 2026.9.1\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Ge UCI-åtkomst till luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/ta/babeld.po b/applications/luci-app-babeld/po/ta/babeld.po
+deleted file mode 100644
+index 0c66f9ff..00000000
+--- a/applications/luci-app-babeld/po/ta/babeld.po
++++ /dev/null
+@@ -1,16 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Last-Translator: Automatically generated\n"
+-"Language-Team: none\n"
+-"Language: ta\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr ""
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr ""
+diff --git a/applications/luci-app-babeld/po/templates/babeld.pot b/applications/luci-app-babeld/po/templates/babeld.pot
+deleted file mode 100644
+index 98fbccf6..00000000
+--- a/applications/luci-app-babeld/po/templates/babeld.pot
++++ /dev/null
+@@ -1,10 +0,0 @@
+-msgid ""
+-msgstr "Content-Type: text/plain; charset=UTF-8"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr ""
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr ""
+diff --git a/applications/luci-app-babeld/po/tr/babeld.po b/applications/luci-app-babeld/po/tr/babeld.po
+deleted file mode 100644
+index c59da4ad..00000000
+--- a/applications/luci-app-babeld/po/tr/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Language: tr\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Last-Translator: Martin Olmer <m_iv@seznam.cz>\n"
+-"Language-Team: Turkish <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/tr/>\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"PO-Revision-Date: 2026-08-31 15:29+0000\n"
+-"X-Generator: Weblate 2026.9.dev0\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "luci-app-babeld için UCI erişimi verin"
+diff --git a/applications/luci-app-babeld/po/uk/babeld.po b/applications/luci-app-babeld/po/uk/babeld.po
+deleted file mode 100644
+index cd73076e..00000000
+--- a/applications/luci-app-babeld/po/uk/babeld.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-05-09 19:42+0000\n"
+-"Last-Translator: Oleksandr Yurov <oyurov@icloud.com>\n"
+-"Language-Team: Ukrainian <https://hosted.weblate.org/projects/openwrt/"
+-"luciapplicationsbabeld/uk/>\n"
+-"Language: uk\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 2026.5-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "Надати доступ до UCI для luci-app-babeld"
+diff --git a/applications/luci-app-babeld/po/zh_Hans/babeld.po b/applications/luci-app-babeld/po/zh_Hans/babeld.po
+deleted file mode 100644
+index 250e02b9..00000000
+--- a/applications/luci-app-babeld/po/zh_Hans/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-04-04 04:55+0000\n"
+-"Last-Translator: konno_he <h3114931694@gmail.com>\n"
+-"Language-Team: Chinese (Simplified Han script) <https://hosted.weblate.org/"
+-"projects/openwrt/luciapplicationsbabeld/zh_Hans/>\n"
+-"Language: zh_Hans\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=1; plural=0;\n"
+-"X-Generator: Weblate 5.17-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "授予 luci-app-babeld 访问 UCI 的权限"
+diff --git a/applications/luci-app-babeld/po/zh_Hant/babeld.po b/applications/luci-app-babeld/po/zh_Hant/babeld.po
+deleted file mode 100644
+index 94691732..00000000
+--- a/applications/luci-app-babeld/po/zh_Hant/babeld.po
++++ /dev/null
+@@ -1,19 +0,0 @@
+-msgid ""
+-msgstr ""
+-"PO-Revision-Date: 2026-02-25 11:53+0000\n"
+-"Last-Translator: EESF-2 <eesf-2@users.noreply.hosted.weblate.org>\n"
+-"Language-Team: Chinese (Traditional Han script) <https://hosted.weblate.org/"
+-"projects/openwrt/luciapplicationsbabeld/zh_Hant/>\n"
+-"Language: zh_Hant\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=1; plural=0;\n"
+-"X-Generator: Weblate 5.16.1-dev\n"
+-
+-#: applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json:4
+-msgid "Babeld"
+-msgstr "Babeld"
+-
+-#: applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json:3
+-msgid "Grant UCI access for luci-app-babeld"
+-msgstr "授予 luci-app-babeld 存取 UCI 的權限"
+diff --git a/applications/luci-app-babeld/root/etc/uci-defaults/40_luci-babeld b/applications/luci-app-babeld/root/etc/uci-defaults/40_luci-babeld
+deleted file mode 100644
+index c9b223ee..00000000
+--- a/applications/luci-app-babeld/root/etc/uci-defaults/40_luci-babeld
++++ /dev/null
+@@ -1,5 +0,0 @@
+-#!/bin/sh
+-
+-uci set babeld.@general[0].ubus_bindings='true'
+-
+-return 0
+diff --git a/applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json b/applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json
+deleted file mode 100644
+index 4dd7df61..00000000
+--- a/applications/luci-app-babeld/root/usr/share/luci/menu.d/luci-app-babeld.json
++++ /dev/null
+@@ -1,12 +0,0 @@
+-{
+-
+-	"admin/status/babeld": {
+-		"title": "Babeld",
+-		"order": 5,
+-		"action": {
+-			"type": "view",
+-			"path": "babeld/babeld-view"
+-		}
+-	}
+-
+-}
+diff --git a/applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json b/applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json
+deleted file mode 100644
+index f2ed6fa6..00000000
+--- a/applications/luci-app-babeld/root/usr/share/rpcd/acl.d/luci-app-babeld.json
++++ /dev/null
+@@ -1,25 +0,0 @@
+-{
+-	"luci-app-babeld": {
+-		"description": "Grant UCI access for luci-app-babeld",
+-		"read": {
+-			"uci": [
+-				"babeld"
+-			],
+-			"ubus": {
+-				"babeld": [
+-					"*"
+-				]
+-			}			
+-		},
+-		"write": {
+-			"uci": [
+-				"babeld"
+-			],
+-			"ubus": {
+-				"babeld": [
+-					"*"
+-				]
+-			}
+-		}
+-	}
+-}
+\ No newline at end of file
