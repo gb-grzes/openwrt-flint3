@@ -4,15 +4,21 @@ Mainline **OpenWrt** support for the **GL.iNet Flint 3 (GL-BE9300)** — Qualcom
 **IPQ5332** (quad Cortex-A53) with tri-band Wi-Fi 7, a Realtek **RTL8372N** 10G
 switch and a **RTL8221B** 2.5G WAN PHY.
 
-> **Kernel update branch: `update-kernel-6.18.55-20261004`, kernel 6.18.55.**
-> Based on the tested `fix-ath12k-legacy-mlo-20261004` branch, preserving the
-> ath12k TX/non-MLO-client fixes, RTL837x roaming/FDB fix, Wi-Fi power reporting,
-> LED behavior, 802.11k/CAKE fixes and MLO/802.11r guard. The user completed a
-> full image build and installed it on Flint 3. Boot, Ethernet initialization,
-> three radio interfaces and two clients completing authentication on MLO are
-> confirmed by the supplied logs. MLO startup retries remain; end-to-end
-> connectivity and long-duration load testing are not yet documented for this
-> kernel. See the [kernel update and validation notes](docs/kernel-6.18.55-flint3-20261004.md)
+> **Application source update branch: `update-app-sources-20261004`.**
+> Updates official OpenWrt feeds and core userspace applications, including
+> OpenSSL 3.5.9, PCRE2 10.49, netifd, procd, rpcd, ubus and hostapd fixes.
+> Kernel 6.18.55, firmware, driver fixes, LED behavior, 802.11k/CAKE,
+> MLO/802.11r guard and fancontrol behavior are preserved. Fancontrol gains
+> the missing Polish translation. Feed revisions and local overrides are
+> saved for reproducible source preparation. See the
+> [application update notes](docs/flint3-app-sources-20261004.md).
+>
+> The preceding kernel branch was built and installed by the user; boot,
+> Ethernet, three radio interfaces and two MLO client authentications were
+> confirmed by logs. These are baseline results, not hardware validation of
+> this application update. A full image of this branch has not yet been built
+> or installed. MLO startup retries remain a known issue. See the
+> [kernel validation notes](docs/kernel-6.18.55-flint3-20261004.md)
 > and [ath12k change summary](docs/flint3-ath12k-changelog-20261004.md).
 > The upstream performance figures below are not measurements of this branch.
 >
@@ -88,10 +94,9 @@ Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
 ## Building
 
 ```sh
-git clone -b update-kernel-6.18.55-20261004 https://github.com/gb-grzes/openwrt-flint3.git
-cd openwrt-flint3
-./scripts/feeds update -a
-./scripts/feeds install -a
+# In a checkout containing this source-update branch:
+git switch update-app-sources-20261004
+sh scripts/flint3-feeds-prepare.sh
 make menuconfig     # Target System: Qualcomm Atheros 802.11be
                     # Subtarget:     ipq53xx
                     # Target Profile: GL.iNet GL-BE9300
@@ -102,8 +107,8 @@ Images land in `bin/targets/qualcommbe/ipq53xx/`.
 
 ### Don't want to build from source?
 
-A full image of this branch was built locally and installed by the user;
-no pre-built binary of this branch is published with this source update.
+No pre-built image of this application-update branch is published or
+hardware-validated. The user built and installed its kernel-update baseline.
 Upstream reference images are published periodically on the
 **[Releases page](https://github.com/perceival/openwrt-flint3/releases)**, in three flavours:
 
