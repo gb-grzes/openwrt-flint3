@@ -3,6 +3,9 @@
 Gałąź: `fix-ppe-rpcd-uhttpd-20261007`, utworzona z przetestowanej gałęzi
 `fix-mlo-startup-20261004` na `21f88499e28ce774a5e6d7a528ed0e9fe6c0e270`.
 
+Status na 2026-10-07: pełna kompilacja zakończona powodzeniem, obraz wgrany,
+użytkownik potwierdził działanie LuCI, internetu, zwykłego 5 GHz oraz MLO.
+
 ## Zakres zmian
 
 1. PPE: dodano wyłącznie brakującą poprawkę sprzątania portów po błędzie
@@ -73,10 +76,43 @@ Skrypt testowy i logi są zapisane lokalnie w `/home/grzesiek/Documents/Codex/`:
 - `flint3-ppe-module-build-20261007.log`
 - `flint3-rpcd-uhttpd-build-20261007.log`
 
-**Pełnego obrazu firmware jeszcze nie zbudowano i nie wgrano na router.**
-Istniejący plik sysupgrade nadal jest poprzednim, przetestowanym obrazem
-z SHA-256 `04ba887381c4a4ae5c17564827de13b09ce0814266d8f653b2348c1e78998003`.
-Nie zawiera opisanych tutaj zmian. Nie należy go traktować jako nowego obrazu.
+## Pełna kompilacja i sprawdzenie na routerze
+
+Użytkownik zbudował i wgrał obraz z commita
+`41074a954cb55480c95661bf188cdec0bedb663e`. Log pełnej kompilacji:
+`/home/grzesiek/Documents/Codex/flint3-ppe-rpcd-uhttpd-full-build-20261007.log`.
+Nie znaleziono błędów kompilacji ani odrzuconych fragmentów patchy; poprawka
+`0457` została zastosowana bez fuzz. W logu występują ostrzeżenia narzędzi
+budowania, nagłówków i innych pakietów, ale pełna kompilacja kończy się
+utworzeniem obrazów, manifestu, indeksów i sum kontrolnych.
+
+SHA-256 obrazu `openwrt-qualcommbe-ipq53xx-glinet_gl-be9300-squashfs-sysupgrade.bin`:
+`8b48e3c78e5cddd0728bb07006eb5d6f52bb857a9258b07af8eacd59dd8609d2`.
+Wszystkie osiem pozycji z `sha256sums` przechodzi sprawdzenie.
+Manifest zawiera kernel 6.18.55, rpcd `2026.10.04~d99f703e-r1`, uhttpd
+`2026.08.24~373145f7-r1`, hostapd r5, fancontrol 2.0.0-r1 i jego LuCI 2.0.0-r6.
+Binarne rpcd, uhttpd i spakowany moduł PPE wewnątrz obrazu są zgodne z nowo
+zbudowanymi pakietami. Wypełnienie za systemem plików SquashFS jest oczekiwane.
+
+Wynik `ubus call system board` na routerze potwierdza Flint 3, kernel 6.18.55
+oraz rewizję `r0+36566-41074a954c`. Dostarczony wycinek logu pokazuje:
+
+- `ppe_offload: ipv6 self-test passed`, `EDMA Hardware Configured`
+  i `EDMA configuration successful`;
+- wszystkie trzy zwykłe interfejsy AP osiągają `AP-ENABLED`;
+- brak wcześniejszego błędu dodawania łącza MLO i wyjścia hostapd z signal 11
+  w dostarczonym wycinku.
+
+`iw dev` potwierdza pasma 2,4/5/6 GHz oraz oba łącza `ap-mld0`:
+5 GHz na kanale 36, 80 MHz, adres `96:83:c4:ce:a3:f8`; 6 GHz na kanale 21,
+320 MHz, osobny adres `00:03:7f:12:62:82`. Poprzednia poprawka rozdzielenia
+adresów MLO pozostaje skuteczna. Użytkownik następnie potwierdził, że wszystko
+działa, w odpowiedzi na pytanie o logowanie do LuCI oraz internet przez zwykłe
+5 GHz i MLO.
+
+To potwierdza prawidłowy start i podstawowe działanie na routerze. Nie jest to
+test długotrwałego obciążenia ani celowo wywołanej awarii inicjalizacji PPE.
+Późniejszy commit aktualizujący wyłącznie ten opis nie wymaga nowej kompilacji.
 
 ## Kompilacja pełnego obrazu
 
@@ -96,4 +132,7 @@ zapis ustawień, zwykłe 5 GHz oraz dostęp do routera i internetu przez MLO.
 Przy pierwszej weryfikacji zachować dotychczasowe ustawienia Wi-Fi.
 Nie wywoływać celowo awarii inicjalizacji PPE na używanym routerze.
 
-Gałąź jest przygotowana lokalnie. Nie wykonano push ani nie utworzono PR.
+Docelowa gałąź na GitHub:
+[`fix-ppe-rpcd-uhttpd-20261007`](https://github.com/gb-grzes/openwrt-flint3/tree/fix-ppe-rpcd-uhttpd-20261007).
+Publikacja dotyczy osobnej gałęzi; gałąź główna pozostaje bez zmian.
+Nie tworzono PR.
